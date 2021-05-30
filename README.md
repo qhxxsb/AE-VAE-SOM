@@ -15,5 +15,9 @@ Faulty Trajectory:
 To Do:
 
 Investigate correlation between the common input vs. faulty input
+
 How to process the biodirectional arrow in the Common trajectroy?
+
 How to down sample the z_e?
+
+Markov Model 
