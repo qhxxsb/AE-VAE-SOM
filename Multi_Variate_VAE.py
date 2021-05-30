@@ -41,6 +41,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from minisom import MiniSom
 import numpy as np
+import copy
 import matplotlib.gridspec as gridspec
 # import Preprocess_Data as predata
 class VAE(nn.Module):
@@ -106,6 +107,12 @@ def Create_Input(amplitude, sample_n,noise_amp, time):
     y_true = y_true.reshape(-1,1)
     y_noise = y_noise.reshape(-1,1)
     return y_true, y_noise
+
+def Fault_Inject(raw_data, noise_amp):
+    noise_data = copy.deepcopy(raw_data) 
+    noise_inject = noise_amp*np.random.normal(0,0.5, size=(raw_data.shape[0], raw_data.shape[1]))
+    noise_data = noise_data + noise_inject
+    return noise_data
 
 
 if __name__ == '__main__':
