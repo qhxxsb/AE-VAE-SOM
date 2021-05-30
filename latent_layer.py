@@ -24,9 +24,9 @@ class EmbeddingLayer(nn.Module):
         self.embeddings = nn.Parameter(torch.rand(num_embeddings, embeddings_dim))
 
     def forward(self, input, som_dim = [8,8]):
-        """Input:
-        ---------
-        x - (batch_size, emb_size, *)
+        """
+        Input: (batch_size, embedding_size)
+
         """
         if input.size(1) != self.embeddings.size(1):
             raise RuntimeError('invalid argument: input.size(1) ({}) must be equal to emb.size(0) ({})'.
@@ -47,26 +47,31 @@ class EmbeddingLayer(nn.Module):
         # Get the location of winners(batch)
         n_x = n_min // som_dim[1]
         n_y = n_min % som_dim[1]
-        # four sides
+
+        # 判断获胜神经元是否处于四周
         x_not_top = n_x < som_dim[0] - 1
         x_not_bottom = n_x > 0
         y_not_right = n_y < som_dim[1] - 1
         y_not_left = n_y > 0     
 
-        # get neighbours
+        # 获得获胜神经元邻居的位置（二维）
         x_up = torch.where(x_not_top, n_x + 1, n_x)
         x_down = torch.where(x_not_bottom, n_x - 1, n_x)
         y_right = torch.where(y_not_right, n_y + 1, n_y)
         y_left = torch.where(y_not_left, n_y - 1, n_y)   
 
+        # 获得获胜神经元邻居的位置（一维）
         n_min_up = x_up*som_dim[1]+n_y
         n_min_down = x_down*som_dim[1]+n_y
         n_min_right = n_x*som_dim[1]+y_right
         n_min_left = n_x*som_dim[1]+y_left
 
+        # [batch_size, 上下左右] 获胜神经元邻居的权值
+        z_q_neighbors = torch.stack([self.embeddings[n_min_up], \
+            self.embeddings[n_min_down], self.embeddings[n_min_left], \
+            self.embeddings[n_min_right]], dim=1)
 
-        z_q_neighbors = torch.stack([self.embeddings[n_min_up], self.embeddings[n_min_down], self.embeddings[n_min_left], self.embeddings[n_min_right]], dim=1)
-
+        # [num_embeddings，batch_size] 存储输入对应获胜神经元的位置用于更新权值
         z_q_local = torch.zeros(self.num_embeddings, batch_size, device=input.device).scatter_(0, n_min.unsqueeze(0), 1)
         z_q_up = torch.zeros(self.num_embeddings, batch_size, device=input.device).scatter_(0, n_min_up.unsqueeze(0), 1)
         z_q_down = torch.zeros(self.num_embeddings, batch_size, device=input.device).scatter_(0, n_min_down.unsqueeze(0), 1)
@@ -74,7 +79,7 @@ class EmbeddingLayer(nn.Module):
         z_q_left = torch.zeros(self.num_embeddings, batch_size, device=input.device).scatter_(0, n_min_left.unsqueeze(0), 1)
 
 
-
+        # z_e和z_q的差值
         dw = input - self.embeddings[n_min]  # [batch_size, num_embeddings]
         self.embeddings.data = self.embeddings.data + self.lr * torch.mm(z_q_local, dw)
         self.embeddings.data = self.embeddings.data + 0.5 * self.lr * torch.mm(z_q_up, dw) \
