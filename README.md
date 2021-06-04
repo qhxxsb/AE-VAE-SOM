@@ -39,3 +39,7 @@ To do list:
 Tidy the source code. 
 
 Change the dataset. 
+
+Add a new block for anomaly detecion in Spatial space. It needs to test more to avoid FP.
+
+The hyper-parameters needs to be clarify in order to get a better results in SOM
