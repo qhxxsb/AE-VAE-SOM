@@ -50,4 +50,7 @@ $\sigma$ should be around $0.5 \rightarrow 1.5$
 
 $Learning rate $ should be around $0.5 \rightarrow 2.5$
 
+$\sigma$
+
+
 
