@@ -43,3 +43,11 @@ Change the dataset.
 Add a new block for anomaly detecion in Spatial space. It needs to test more to avoid FP.
 
 The hyper-parameters needs to be clarify in order to get a better results in SOM
+
+$\sigma$ means the divergence of the data. sigma is larger, the results are more dispersed.
+
+$\sigma$ should be around $0.5 \rightarrow 1.5$
+
+$Learning rate $ should be around $0.5 \rightarrow 2.5$
+
+
