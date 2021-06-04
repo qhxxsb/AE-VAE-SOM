@@ -115,6 +115,52 @@ def Fault_Inject(raw_data, noise_amp):
     return noise_data
 
 
+
+
+def Assign_States(win_map):
+### Initialize the states for Markov Chain  ### 
+    states_dic = {}
+    i = 0
+    for keys in win_map:
+        if len(win_map[keys]) != 0:
+            i = i + 1
+            states_dic[keys] = ['S' + str(i), i]
+    return states_dic
+
+def Get_State(states_dic,w_list):
+### The win map list gotten from SOM trajectory ###
+    states_list = []
+    for i in range (0,len(w_list)):
+        states_list.append(states_dic.get(w_list[i]))
+    return states_list
+
+
+def Markov_Transistion(transitions):
+    ### Train the Markov transition matrix, input must be the states. ###
+    transitions_list = []
+    for i in range (0,len(transitions)):
+        transitions_list.append(transitions[i][-1])
+    n = 1+ max(transitions_list) #number of states
+
+    transitions_matrix = [[0]*n for _ in range(n)]
+
+    for (i,j) in zip(transitions_list,transitions_list[1:]):
+        transitions_matrix[i][j] += 1
+
+    #now convert to probabilities:
+    for row in transitions_matrix:
+        s = sum(row)
+        if s > 0:
+            row[:] = [f/s for f in row]
+    return np.array(transitions_matrix)
+
+# def Temporal_Alignment(win_map, w_list, time_stamp):
+#     states_dic = Assign_States(win_map)
+#     states_list = Get_State(states_dic,w_list)
+#     # for i in range (0,len(states_list)):
+        
+  
+
 if __name__ == '__main__':
     som_dim = [4,4]
     batch_size = 64
@@ -128,13 +174,13 @@ if __name__ == '__main__':
     # sc = MinMaxScaler()
     # label_dataset = sc.fit_transform(label)
     # train_dataset = sc.fit_transform(train)
-    split_coefficient = 0.6
-    train_dataset = torch.tensor(dataset[:int(len(dataset)*split_coefficient),:])   
-    test_dataset =  torch.tensor(dataset[int(len(dataset)*split_coefficient):-1,:])  
-    train_label = torch.tensor(label[:int(len(dataset)*split_coefficient),:])
-    test_label =  torch.tensor(label[int(len(train_dataset)*split_coefficient):-1,:]) 
-    
-    
+    # split_coefficient = 0.6
+    # train_dataset = torch.tensor(dataset[:int(len(dataset)*split_coefficient),:])   
+    # test_dataset =  torch.tensor(dataset[int(len(dataset)*split_coefficient):-1,:])  
+    # train_label = torch.tensor(label[:int(len(dataset)*split_coefficient),:])
+    # test_label =  torch.tensor(label[int(len(train_dataset)*split_coefficient):-1,:]) 
+    train_dataset = torch.tensor(dataset)   
+    train_label = torch.tensor(label)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     input_dim = train_dataset.shape[1]
     vae = VAE(input_dim).to(device)
@@ -147,8 +193,8 @@ if __name__ == '__main__':
     # train_dataset = torch.tensor(sc.fit_transform(train_dataset))
     x = train_dataset.float()
     y = train_label.float()
-    test_x = test_dataset.float()
-    test_y = test_label.float()
+    # test_x = test_dataset.float()
+    # test_y = test_label.float()
     
     BATCH_SIZE = 50
     EPOCH = 100
@@ -184,82 +230,149 @@ if __name__ == '__main__':
 
     x = x.to(device)
     
-    test_x, test_y = Variable(test_x), Variable(test_y)
+    # test_x, test_y = Variable(test_x), Variable(test_y)
     
     
-    prediction, z_e = vae(test_x)
+    # prediction, z_e = vae(test_x)
+    # data_som = z_e.detach().cpu().numpy()
+    # som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=1.5, learning_rate=0.5)
+    # som.pca_weights_init(data_som)
+    # som.train(data_som, 1000, random_order=True, verbose=True)  # random training
+    # win_map = som.win_map(data_som)
+    
+    
+    #### Train temporal modeling ###
+    dataset_temporal = torch.tensor(dataset)
+    dataset_temporal = dataset_temporal.float()
+    dataset_temporal =  Variable(dataset_temporal)
+     
+    prediction, z_e = vae(dataset_temporal)
+    z_e_array = z_e.data.cpu().numpy()
     data_som = z_e.detach().cpu().numpy()
     som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=1.5, learning_rate=0.5)
     som.pca_weights_init(data_som)
     som.train(data_som, 1000, random_order=True, verbose=True)  # random training
     win_map = som.win_map(data_som)
+    states_dic = Assign_States(win_map)
     
     
-    z_e_array = z_e.data.cpu().numpy()
-    z_e_array = z_e_array[:500,:]
-    ### Downsampling ###
-    z_e_down = z_e_array[0:-1:20]
-
+    
     w_list = []
-    for i in range (0,len(z_e_down)):
-        w = som.winner(z_e_down[i])
-        w_list.append(w)
-        plt.plot(w[0]+.5,w[1]+.5, marker = '+', color = 'r')
-    fig, ax = plt.subplots()
-    plt.pcolor(som.distance_map().T, cmap='bone_r')
-    plt.colorbar()
-    for i in range (0,len(w_list)):
-        if i <= len(w_list) -2:
-            x_start = w_list[i][0] +0.5
-            x_end = w_list[i+1][0]+0.5
-            y_start = w_list[i][1]+0.5
-            y_end = w_list[i+1][1]+0.5
-            xyA = (x_start,y_start)
-            xyB = (x_end,y_end)
-            coordsA = "data"
-            coordsB = "data"
-            con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-                          arrowstyle="-|>", shrinkA=5, shrinkB=5,
-                          mutation_scale=20, fc="w",color = 'green')
-            ax.plot([x_start, x_end], [y_start,y_end], "o")
-            ax.add_artist(con)
+    for i in range (0,len(z_e_array)):
+        w = som.winner(z_e_array[i])
+        w_list.append(w)   
+    states_list = Get_State(states_dic, w_list)
+    transition_matrix = Markov_Transistion(states_list)
+    # z_e_array = z_e.data.cpu().numpy()
+    # z_e_array = z_e_array[:500,:]
+    # ### Downsampling ###
+    # z_e_down = z_e_array[0:-1:20]
+
+    # w_list = []
+    # for i in range (0,len(z_e_down)):
+    #     w = som.winner(z_e_down[i])
+    #     w_list.append(w)
+    #     plt.plot(w[0]+.5,w[1]+.5, marker = '+', color = 'r')
+    # fig, ax = plt.subplots()
+    # plt.pcolor(som.distance_map().T, cmap='bone_r')
+    # plt.colorbar()
+    # for i in range (0,len(w_list)):
+    #     if i <= len(w_list) -2:
+    #         x_start = w_list[i][0] +0.5
+    #         x_end = w_list[i+1][0]+0.5
+    #         y_start = w_list[i][1]+0.5
+    #         y_end = w_list[i+1][1]+0.5
+    #         xyA = (x_start,y_start)
+    #         xyB = (x_end,y_end)
+    #         coordsA = "data"
+    #         coordsB = "data"
+    #         con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+    #                       arrowstyle="-|>", shrinkA=5, shrinkB=5,
+    #                       mutation_scale=20, fc="w",color = 'green')
+    #         ax.plot([x_start, x_end], [y_start,y_end], "o")
+    #         ax.add_artist(con)
             
  ### Test a new data containing faults ###            
             
-            
+# sampling = 1000
+# time_stamp = np.linspace(0, 50 ,sampling)  
 
-label_1, test_1 = Create_Input(5, 1000, 1,50)
-label_2, test_2 = Create_Input(3, 1000, 2,50)   
-label_3, test_3 = Create_Input(1, 1000, 3,50)
+# label_1, test_1 = Create_Input(5, sampling, 1,max(time_stamp))
+# label_2, test_2 = Create_Input(3, sampling, 2,max(time_stamp))   
+# label_3, test_3 = Create_Input(1, sampling, 3,max(time_stamp))
 
-dataset = np.concatenate((test_1,test_2,test_3), axis = 1)
-test_data = torch.tensor(dataset)
-test_data = test_data.float()
-test_data = Variable(test_data)
-prediction, z_e = vae(test_data)
-z_e_array = z_e.data.cpu().numpy()
-z_e_array = z_e_array[:500,:]
-z_e_down = z_e_array[0:-1:20]
-w_list = []
-for i in range (0,len(z_e_down)):
-    w = som.winner(z_e_down[i])
-    w_list.append(w)
-    plt.plot(w[0]+.5,w[1]+.5, marker = '+', color = 'b')
-for i in range (0,len(w_list)):
-    if i <= len(w_list) -2:
-        x_start = w_list[i][0] +0.5
-        x_end = w_list[i+1][0]+0.5
-        y_start = w_list[i][1]+0.5
-        y_end = w_list[i+1][1]+0.5
-        xyA = (x_start,y_start)
-        xyB = (x_end,y_end)
-        coordsA = "data"
-        coordsB = "data"
-        con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-                      arrowstyle="-|>", shrinkA=5, shrinkB=5,
-                      mutation_scale=20, fc="w",color = 'red',linestyle ='--')
-        ax.plot([x_start, x_end], [y_start,y_end], "o")
-        ax.add_artist(con)
+# dataset = np.concatenate((test_1,test_2,test_3), axis = 1)
+# test_data = torch.tensor(dataset)
+# test_data = test_data.float()
+# test_data = Variable(test_data)
+# prediction, z_e = vae(test_data)
+# z_e_array = z_e.data.cpu().numpy()
+# z_e_array = z_e_array[:500,:]
+# test_timestamp = time_stamp[:500,]
+
+# z_e_down = z_e_array[0:-1:20]
+# test_timestamp = test_timestamp[0:-1:20]
+# w_list = []
+# for i in range (0,len(z_e_down)):
+#     w = som.winner(z_e_down[i])
+#     w_list.append(w)
+#     plt.plot(w[0]+.5,w[1]+.5, marker = '+', color = 'b')
+# for i in range (0,len(w_list)):
+#     if i <= len(w_list) -2:
+#         x_start = w_list[i][0] +0.5
+#         x_end = w_list[i+1][0]+0.5
+#         y_start = w_list[i][1]+0.5
+#         y_end = w_list[i+1][1]+0.5
+#         xyA = (x_start,y_start)
+#         xyB = (x_end,y_end)
+#         coordsA = "data"
+#         coordsB = "data"
+#         con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+#                       arrowstyle="-|>", shrinkA=5, shrinkB=5,
+#                       mutation_scale=20, fc="w",color = 'red',linestyle ='--')
+#         ax.plot([x_start, x_end], [y_start,y_end], "o")
+#         ax.add_artist(con)
         
         
 #### Next step: Training HMM or Markov Chain ####
+# def transition_matrix(transitions, states_dic):
+#     shape = len(states_dic)
+#     M = np.zeros((shape,shape))
+
+
+    # for i in range (0,len(transitions)):
+    #     count = -1
+    #     for j in states_dic.keys():
+    #         count = count + 1
+    #         if states_dic[j] == transitions[i]:
+    #             print (count)
+            
+#     for (i,j) in zip(T,T[1:]):
+#         M[i][j] += 1
+#     #now convert to probabilities:
+#     for row in M:
+#         s = sum(row)
+#         if s > 0:
+#             row[:] = [f/s for f in row]
+#     return M
+
+
+
+# def transition_matrix(transitions,states_dic):
+#     shape = len(states_dic)
+    
+
+#     M = [[0]*shape for _ in range(shape)]
+#     for i in range (0,len(transitions)):
+#         count = -1
+#         for j in states_dic.keys():
+#             count = count + 1
+#             if states_dic[j] == transitions[i]:
+#                 M[count][j] + = 1
+
+#     #now convert to probabilities:
+#     for row in M:
+#         s = sum(row)
+#         if s > 0:
+#             row[:] = [f/s for f in row]
+#     return M
