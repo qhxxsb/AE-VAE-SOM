@@ -10,7 +10,7 @@
     * 2) Temporal anomaly detection.
 
 
-
+___
 ### Updated May 27th:
 
 * Common Trajectory:
@@ -30,17 +30,16 @@
 4. <del> Markov Model </del>
 
 
-
+___
 ### Updated June 4th:
 
-* Fixed up the Markov Chain. Need to be validated. *
+* Fixed up the Markov Chain. Need to be validated.
     * *Note: The Markov Chain is not the only method to optimize the temporal model.*
 * Set up a new block for spatial anomaly detection.
      * $P_{anomaly}(v) = 1- exp(-(error_q{v}/{\sigma}))$.
             $v$ refers to input data.
             $\sigma$ refers to $\frac{1}{2} \cdot ||w_{bmu}(v)-w_{bmu}^{'}(v)||$
-* $\sigma$ means the divergence of the data. sigma is larger, the results are more dispersed. $\sigma$ should be around $0.5 \rightarrow 1.5$ $Learning\ rate $ should be around $0.5 \rightarrow 2.5$. The map size should not more than $(10,10).$
-
+* $\sigma$ means the divergence of the data. sigma is larger, the results are more dispersed. $\sigma$ should be around $0.5 \rightarrow 1.5$ $Learning\ rate $ should be around $0.5 \rightarrow 2.5$. The map size should not more than $(10,10).$ <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://share.streamlit.io/justglowing/minisom/dashboard/dashboard.py, "demo")
 
 
 ### To do list on June 4th
@@ -53,7 +52,7 @@
     * Investigation in Markov Chain
     * Investigation in Affinity Matrix.(Continue to abstract for the SOM neuron).
 
-
+___
 
 
 
