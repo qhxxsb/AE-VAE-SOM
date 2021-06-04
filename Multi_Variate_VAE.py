@@ -31,8 +31,10 @@ Plz note that the rules of visualization is shown below:
 
 import torch
 import torch.nn as nn
+from scipy.spatial import distance
 import torch.nn.functional as F
 import torch.utils.data as Data
+import math
 import torch.optim as optim
 from torch.autograd import Variable
 from matplotlib.patches import ConnectionPatch
@@ -159,10 +161,36 @@ def Markov_Transistion(transitions):
 #     states_list = Get_State(states_dic,w_list)
 #     # for i in range (0,len(states_list)):
         
-  
+def Second_Neighbor(z_e_array, som):
+    second_bmu_list = []
+    for i in range (0,len(z_e_array)):
+        second_bmu_dic = {}
+
+        weights = som.get_weights()
+        for key in win_map:
+            if key != som.winner(z_e_array[i]):
+                second_bmu_dic[key] = distance.euclidean(z_e_array[i], weights[key[0]][key[1]])
+        minval = min(second_bmu_dic.values())
+        res = [k for k, v in second_bmu_dic.items() if v==minval]
+        second_bmu_list.append(res)
+    return second_bmu_list
+
+def Anomaly_Probability(second_bmu_list, z_e_array, som):
+    weights = som.get_weights()
+    error_coefficent = []
+    p_anaomaly_list = []
+    for i in range (0,len(z_e_array)):
+        winner_index = som.winner(z_e_array[i])
+        second_winner_index = second_bmu_list[i][0]
+        error = distance.euclidean(z_e_array[i] , weights[winner_index[0]][winner_index[1]])
+        sigma = 0.5 * distance.euclidean(weights[second_winner_index[0]][second_winner_index[1]] ,weights[winner_index[0]][winner_index[1]])
+        p_anomaly = 1- math.exp(-((error/sigma)**2))
+        p_anaomaly_list.append(p_anomaly)
+        error_coefficent.append((error/sigma)**2)
+    return p_anaomaly_list, error_coefficent
 
 if __name__ == '__main__':
-    som_dim = [4,4]
+    som_dim = [16,16]
     batch_size = 64
 
     label_1, train_1 = Create_Input(5, 1000, 0,50)
@@ -249,49 +277,48 @@ if __name__ == '__main__':
     prediction, z_e = vae(dataset_temporal)
     z_e_array = z_e.data.cpu().numpy()
     data_som = z_e.detach().cpu().numpy()
-    som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=1.5, learning_rate=0.5)
-    som.pca_weights_init(data_som)
-    som.train(data_som, 1000, random_order=True, verbose=True)  # random training
+    som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=0.8, learning_rate=0.5)
+    som.random_weights_init(data_som)
+    som.train(data_som, 10000, random_order=True, verbose=True)  # random training
     win_map = som.win_map(data_som)
     states_dic = Assign_States(win_map)
     
-    
-    
+    ### Temporal Modelling ###
     w_list = []
     for i in range (0,len(z_e_array)):
         w = som.winner(z_e_array[i])
         w_list.append(w)   
     states_list = Get_State(states_dic, w_list)
     transition_matrix = Markov_Transistion(states_list)
+    
+    
     # z_e_array = z_e.data.cpu().numpy()
     # z_e_array = z_e_array[:500,:]
     # ### Downsampling ###
-    # z_e_down = z_e_array[0:-1:20]
+    z_e_down = z_e_array[0:-1:20]
 
-    # w_list = []
-    # for i in range (0,len(z_e_down)):
-    #     w = som.winner(z_e_down[i])
-    #     w_list.append(w)
-    #     plt.plot(w[0]+.5,w[1]+.5, marker = '+', color = 'r')
-    # fig, ax = plt.subplots()
-    # plt.pcolor(som.distance_map().T, cmap='bone_r')
-    # plt.colorbar()
-    # for i in range (0,len(w_list)):
-    #     if i <= len(w_list) -2:
-    #         x_start = w_list[i][0] +0.5
-    #         x_end = w_list[i+1][0]+0.5
-    #         y_start = w_list[i][1]+0.5
-    #         y_end = w_list[i+1][1]+0.5
-    #         xyA = (x_start,y_start)
-    #         xyB = (x_end,y_end)
-    #         coordsA = "data"
-    #         coordsB = "data"
-    #         con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-    #                       arrowstyle="-|>", shrinkA=5, shrinkB=5,
-    #                       mutation_scale=20, fc="w",color = 'green')
-    #         ax.plot([x_start, x_end], [y_start,y_end], "o")
-    #         ax.add_artist(con)
-            
+    w_list = []
+    for i in range (0,len(z_e_down)):
+        w = som.winner(z_e_down[i])
+        w_list.append(w)
+    fig, ax = plt.subplots()
+    plt.pcolor(som.distance_map().T, cmap='bone_r')
+    plt.colorbar()
+    for i in range (0,len(w_list)):
+        if i <= len(w_list) -2:
+            x_start = w_list[i][0] +0.5
+            x_end = w_list[i+1][0]+0.5
+            y_start = w_list[i][1]+0.5
+            y_end = w_list[i+1][1]+0.5
+            xyA = (x_start,y_start)
+            xyB = (x_end,y_end)
+            coordsA = "data"
+            coordsB = "data"
+            con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+                          arrowstyle="-|>", shrinkA=5, shrinkB=5,
+                          mutation_scale=20, fc="w",color = 'green')
+            ax.plot([x_start, x_end], [y_start,y_end], "o")
+            ax.add_artist(con)
  ### Test a new data containing faults ###            
             
 # sampling = 1000
@@ -334,45 +361,3 @@ if __name__ == '__main__':
 #         ax.add_artist(con)
         
         
-#### Next step: Training HMM or Markov Chain ####
-# def transition_matrix(transitions, states_dic):
-#     shape = len(states_dic)
-#     M = np.zeros((shape,shape))
-
-
-    # for i in range (0,len(transitions)):
-    #     count = -1
-    #     for j in states_dic.keys():
-    #         count = count + 1
-    #         if states_dic[j] == transitions[i]:
-    #             print (count)
-            
-#     for (i,j) in zip(T,T[1:]):
-#         M[i][j] += 1
-#     #now convert to probabilities:
-#     for row in M:
-#         s = sum(row)
-#         if s > 0:
-#             row[:] = [f/s for f in row]
-#     return M
-
-
-
-# def transition_matrix(transitions,states_dic):
-#     shape = len(states_dic)
-    
-
-#     M = [[0]*shape for _ in range(shape)]
-#     for i in range (0,len(transitions)):
-#         count = -1
-#         for j in states_dic.keys():
-#             count = count + 1
-#             if states_dic[j] == transitions[i]:
-#                 M[count][j] + = 1
-
-#     #now convert to probabilities:
-#     for row in M:
-#         s = sum(row)
-#         if s > 0:
-#             row[:] = [f/s for f in row]
-#     return M
