@@ -32,7 +32,6 @@ Plz note that the rules of visualization is shown below:
 import torch
 import torch.nn as nn
 from scipy.spatial import distance
-import torch.nn.functional as F
 import torch.utils.data as Data
 import math
 import torch.optim as optim
@@ -40,15 +39,15 @@ from torch.autograd import Variable
 from matplotlib.patches import ConnectionPatch
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
 from minisom import MiniSom
 import numpy as np
 import copy
-import matplotlib.gridspec as gridspec
+import sklearn.preprocessing as preprocess 
+
 # import Preprocess_Data as predata
 class VAE(nn.Module):
     # Assuming an input size of 
-    def __init__(self, input_dim, code_size=1024, device = 'cuda', latent_dim = 6, alpha=1.0, beta=0.9, gamma=1.8, tau=1.4):
+    def __init__(self, input_dim, code_size=1024, device = 'cuda', latent_dim = 3, alpha=1.0, beta=0.9, gamma=1.8, tau=1.4):
         super(VAE, self).__init__()
         # Define the parameters        
         self.beta = beta
@@ -58,6 +57,7 @@ class VAE(nn.Module):
         # Define the encoder architecture
         self.relu = nn.LeakyReLU()
         self.enc_fc0 = nn.Linear(input_dim, 10)
+        self.dropout = nn.Dropout(p=0.2)
         self.enc_fc1 = nn.Linear(10, 50)
         self.enc_fc11 = nn.Linear(50, latent_dim)
         self.enc_fc12 = nn.Linear(50, latent_dim)
@@ -72,7 +72,9 @@ class VAE(nn.Module):
 
     def encode(self, x):
         x = self.relu(self.enc_fc0(x))
+        # x = self.dropout(x)
         x = self.relu(self.enc_fc1(x))
+        
         return self.relu(self.enc_fc11(x)), self.relu(self.enc_fc12(x))
         
     def reparameterize(self, mu, logvar):
@@ -84,6 +86,7 @@ class VAE(nn.Module):
         x =  self.relu(self.dec_fc(z))
         # x =  self.relu(self.dec_fc0(x))
         x = self.relu(self.dec_fc1(x))
+        # x = self.dropout(x)
         x = self.relu(self.dec_fc2(x))
         # x = self.relu(self.dec_fc3(x))
         return x
@@ -97,6 +100,25 @@ class VAE(nn.Module):
         return decoder_out, z_e
     
 
+def Read_Csv(file_name,column_name):
+    """  
+    Parameters
+    ----------
+    filename : TYPE
+        DESCRIPTION.
+    column_name : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    raw_data : TYPE
+        DESCRIPTION.
+
+    """
+    file_path = '/home/pengsu-workstation/SocketSense/GenerateData/' + file_name
+    raw_file=pd.read_csv(file_path)
+    raw_data = raw_file[column_name].values
+    return raw_data.reshape(-1,1) 
 
 def Create_Input(amplitude, sample_n,noise_amp, time):
     
@@ -189,16 +211,63 @@ def Anomaly_Probability(second_bmu_list, z_e_array, som):
         error_coefficent.append((error/sigma)**2)
     return p_anaomaly_list, error_coefficent
 
+def Affinity_states(som,states_dic):
+    weights = som.get_weights()
+    ### Define SMU  ###
+    ### An offline(pre-trained) method to collect the SMU ###
+    affinity_states_dic = {}
+    for key in win_map.keys():
+        path_state = weights[key[0]][key[1]]
+        state_name = states_dic[key][0]
+        affinity_states_dic[state_name] = {}
+        for affinity_key in win_map.keys():
+            # iteration_dic = {}
+            if affinity_key !=  key:
+                affinity_state_name = states_dic[affinity_key][0]
+                distance_euclidean = distance.euclidean(weights[affinity_key[0]][affinity_key[1]], path_state)
+                # iteration_dic[affinity_state_name] = distance_euclidean
+                affinity_states_dic[state_name][affinity_state_name] = distance_euclidean
+        # affinity_states_dic[state_name] = affinity_states_dic[state_name].reshape(1,-1)
+        # affinity_states_dic[state_name] = preprocess.normalize(affinity_states_dic[state_name])
+    return affinity_states_dic
+                
+        
+def FP_Rate(input_array, som):
+    second_bmu_list = Second_Neighbor(z_e_down, som)
+    anaomaly_list ,error_list = Anomaly_Probability(second_bmu_list , z_e_down,som)
+    anomaly  = 0
+    for i in range (0,len(anaomaly_list)):
+        if anaomaly_list[i] >= 0.7: 
+            anomaly = anomaly + 1
+    anomaly = anomaly/ len(anaomaly_list)
+    print  (anomaly)
+
 if __name__ == '__main__':
-    som_dim = [16,16]
+    som_dim = [20,20]
+    # som_dim = [4,4] # A demo size
     batch_size = 64
 
-    label_1, train_1 = Create_Input(5, 1000, 0,50)
-    label_2, train_2 = Create_Input(3, 1000, 0,50)   
-    label_3, train_3 = Create_Input(1, 1000, 0,50)
+    # label_1, train_1 = Create_Input(5, 1000, 0,50)
+    # label_2, train_2 = Create_Input(3, 1000, 0,50)   
+    # label_3, train_3 = Create_Input(1, 1000, 0,50)
+    
+    
+    
+    train_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
+    label_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
+    train_post = Read_Csv('MutilVariate.csv', 'Post_dist')
+    label_post = Read_Csv('MutilVariate.csv', 'Post_dist')
+    train_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
+    label_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
+    
+    label_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
+    train_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
+    
     ### train data means containing the noise
-    dataset = np.concatenate((train_1,train_2,train_3), axis = 1)
-    label = np.concatenate((label_1,label_2,label_3), axis = 1)
+    # dataset = np.concatenate((train_1,train_2,train_3), axis = 1)
+    # label = np.concatenate((label_1,label_2,label_3), axis = 1)
+    dataset = np.concatenate((train_ant,train_post,train_lat,train_med), axis = 1)
+    label = np.concatenate((label_ant,label_post,label_lat,label_med), axis = 1)
     # sc = MinMaxScaler()
     # label_dataset = sc.fit_transform(label)
     # train_dataset = sc.fit_transform(train)
@@ -212,7 +281,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     input_dim = train_dataset.shape[1]
     vae = VAE(input_dim).to(device)
-    optimizer = torch.optim.Adam(vae.parameters(), lr=0.01)
+    optimizer = optim.Adam(vae.parameters(), lr=0.01)
     loss_func = torch.nn.MSELoss() 
             
     
@@ -224,13 +293,13 @@ if __name__ == '__main__':
     # test_x = test_dataset.float()
     # test_y = test_label.float()
     
-    BATCH_SIZE = 50
-    EPOCH = 100
+    BATCH_SIZE = 100
+    EPOCH = 500
     torch_dataset = Data.TensorDataset(x, y)
     loader = Data.DataLoader(
         dataset=torch_dataset, 
         batch_size=BATCH_SIZE, 
-        shuffle=True, num_workers=2,)
+        shuffle=True, num_workers=5,)
 
     # torch can only train on Variable, so convert them to Variable
     x, y = Variable(x), Variable(y)
@@ -248,7 +317,7 @@ if __name__ == '__main__':
             loss_3 = loss_func(prediction[:,2], b_y[:,2])
             loss = loss_1 +loss_2+loss_3     # must be (1. nn output, 2. target)
             # loss = loss_func(prediction, b_y)
-            if step % 20 == 0:
+            if step % 50 == 0:
                 print('%d:loss %f' %(epoch,loss))
                 
             loss_list.append(loss.item())
@@ -277,8 +346,9 @@ if __name__ == '__main__':
     prediction, z_e = vae(dataset_temporal)
     z_e_array = z_e.data.cpu().numpy()
     data_som = z_e.detach().cpu().numpy()
-    som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=0.8, learning_rate=0.5)
-    som.random_weights_init(data_som)
+    som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=1.2, learning_rate=1.5)
+    # som.random_weights_init(data_som)
+    som.pca_weights_init(data_som)
     som.train(data_som, 10000, random_order=True, verbose=True)  # random training
     win_map = som.win_map(data_som)
     states_dic = Assign_States(win_map)
@@ -319,6 +389,8 @@ if __name__ == '__main__':
                           mutation_scale=20, fc="w",color = 'green')
             ax.plot([x_start, x_end], [y_start,y_end], "o")
             ax.add_artist(con)
+
+            
  ### Test a new data containing faults ###            
             
 # sampling = 1000
