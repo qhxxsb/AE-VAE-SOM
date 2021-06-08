@@ -91,11 +91,13 @@ ___
 1. Reschematic Markov Chain.
     * The Markov Chain should save as a table (dataframe) such as following:
   
+
         |          |      S1       |  S2     |   S3       |.......|
-        |----------|:-------------:|----  --:|--  -     -:|--  --:|
+        |:--------:|:-------------:|:-------:|:----------:|:-- --:|
         | S1       |  $\times$     | $P_{12}$|    $P_{13}$|.......|
         | S2       |   $P_{21}$    | $\times$|  $P_{23}$  |.......|
         | S3       | $P_{31}$      | $P_{32}$| $\times$   |.......|
+
 
 2. Add text (probability) in the temporal trajectory figures.
 3. Write a Problog program for the figures.
