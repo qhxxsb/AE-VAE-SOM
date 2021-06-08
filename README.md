@@ -36,12 +36,12 @@ ___
 * Fixed up the Markov Chain. Need to be validated.
     * *Note: The Markov Chain is not the only method to optimize the temporal model.*
 * Set up a new block for spatial anomaly detection.
-     * $P_{anomaly}(v) = 1- exp(-(error_q{v}/{\sigma}))$. 
+     * $P_{anomaly}(v) = 1- exp(-(error_q{v}/{\sigma})) (1)$. 
         <br/>$v$ refers to input data.
         <br/>$\sigma$ refers to $\frac{1}{2} \cdot ||w_{bmu}(v)-w_{bmu}^{'}(v)||$
         <br/>$error_q{v}$ refers to $||v-bmu(u_i)||$
 * <del>$\sigma$ means the divergence of the data. sigma is larger, the results are more dispersed. $\sigma$ should be around $0.5 \rightarrow 1.5$ $Learning\ rate $ should be around $0.5 \rightarrow 2.5$. The map size should not more than $(10,10).$</del>
-*  <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://share.streamlit.io/justglowing/minisom/dashboard/dashboard.py, "demo")
+*  <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/An_example.png, "demo")
 * An example:
  <br/>![image](/home/pengsu-workstation/SocketSense/AE-VAE-SOM/Figure/An_example.png){:height="50%" width="50%"}
 * Loss
@@ -68,5 +68,42 @@ ___
     * Add a new block to check the FP.
     * Add a new block to generate the affinity(similarity) matrx, which could be treated as *Truth table*.
 ### To do list after June 5th's update
-1. Normaliztion the Affinity matrix, which should either indicate the probability or similarity.
+1. <del> Normaliztion the Affinity matrix, which should either indicate the probability or similarity.</del>
 2. Continue to work on the termporal anomaly detection.
+___
+
+### Updated June 8th
+
+1. Get the Affinity probability of each *Path state.*
+2. Visualization each Affinity Probability according to 
+    * $P_{affinity} = exp(-distance(w_{i}, w_{j})/{\delta}) (2)$
+    <br/> $w_{i}$ refers to the path state, $w_{j}$ refer to the other state
+    <br/> I set a threshold $\delta$, to select the affinity. When $P_{affinity} > \delta$, we treat $w_j$ as *affinity state.*
+3. Map the input to SOM.
+    * For example, in our case, we have four pressures, these four pressure's sum will map with the Som. When the Pressure is larger, the color is deeper. 
+    <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Spatial_Trajectory.png){:height="50%" width="50%"}
+4. Overview results.
+    * Temporal path-state trajectory.
+    <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Temporal_Trajectory.png){:height="50%" width="50%"}
+    * Visualization of affinity and path states.
+    <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Visualization_Velocity.png){:height="50%" width="50%"}
+### To do list after June 8th's update
+1. Reschematic Markov Chain.
+    * The Markov Chain should save as a table (dataframe) such as following:
+  
+        |          |      S1       |  S2     |   S3       |.......|
+        |----------|:-------------:|----  --:|--  -     -:|--  --:|
+        | S1       |  $\times$     | $P_{12}$|    $P_{13}$|.......|
+        | S2       |   $P_{21}$    | $\times$|  $P_{23}$  |.......|
+        | S3       | $P_{31}$      | $P_{32}$| $\times$   |.......|
+
+2. Add text (probability) in the temporal trajectory figures.
+3. Write a Problog program for the figures.
+
+### Discussion ###
+1. How can we prove that *Formula (2)* is reliable?
+    * Usually, we should use $(w_{i}-w_{j})^2$ to compute the affinity matrix. But in this case, if we use square, the amount of affinity state will increase a lot. Is *Formula (2)* reasonable ?
+    * How should we understand $\delta$?
+2. How can we improve/calibrate the method used to map the input data to SOM?
+3. Validate our data.....(This may meet a lot of problems)
+
