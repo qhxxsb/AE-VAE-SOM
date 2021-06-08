@@ -45,7 +45,7 @@ ___
 * An example:
  <br/>![image](/home/pengsu-workstation/SocketSense/AE-VAE-SOM/Figure/An_example.png){:height="50%" width="50%"}
 * Loss
- <br/>![image](/home/pengsu-workstation/SocketSense/AE-VAE-SOM/Figure/Loss_AE.png){:height="50%" width="50%"}
+ <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Loss_AE.png){:height="50%" width="50%"}
 
 ### To do list after June 4th's update
 
