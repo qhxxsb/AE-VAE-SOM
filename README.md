@@ -41,9 +41,9 @@ ___
         <br/>$\sigma$ refers to $\frac{1}{2} \cdot ||w_{bmu}(v)-w_{bmu}^{'}(v)||$
         <br/>$error_q{v}$ refers to $||v-bmu(u_i)||$
 * <del>$\sigma$ means the divergence of the data. sigma is larger, the results are more dispersed. $\sigma$ should be around $0.5 \rightarrow 1.5$ $Learning\ rate $ should be around $0.5 \rightarrow 2.5$. The map size should not more than $(10,10).$</del>
-*  <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/An_example.png, "demo")
+*  <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://share.streamlit.io/justglowing/minisom/dashboard/dashboard.py, "demo")
 * An example:
- <br/>![image](/home/pengsu-workstation/SocketSense/AE-VAE-SOM/Figure/An_example.png){:height="50%" width="50%"}
+ <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/An_example.png){:height="50%" width="50%"}
 * Loss
  <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Loss_AE.png){:height="50%" width="50%"}
 
