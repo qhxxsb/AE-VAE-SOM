@@ -28,7 +28,7 @@ ___
 
 1. Investigate correlation between the common input vs. faulty input
 2. How to process the biodirectional arrow in the Common trajectroy?
-3. <del> How to down sample the z_e? </del>
+3. <del> How to down sample the $z_e$? </del>
 4. <del> Markov Model </del>
 ___
 ### Updated June 4th:
@@ -81,7 +81,7 @@ ___
     <br/> I set a threshold $\delta$, to select the affinity. When $P_{affinity} > \delta$, we treat $w_j$ as *affinity state.*
 3. Map the input to SOM.
     * For example, in our case, we have four pressures, these four pressure's sum will map with the Som. When the Pressure is larger, the color is deeper. 
-    <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Spatial_Trajectory.png){:height="50%" width="50%"}
+    <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Heat_Map.png){:height="50%" width="50%"}
 4. Overview results.
     * Temporal path-state trajectory.
     <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Temporal_Trajectory.png){:height="50%" width="50%"}
