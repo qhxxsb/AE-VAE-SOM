@@ -43,7 +43,7 @@ from minisom import MiniSom
 import numpy as np
 import copy
 import sklearn.preprocessing as preprocess 
-
+from sklearn.preprocessing import MinMaxScaler
 # import Preprocess_Data as predata
 class VAE(nn.Module):
     # Assuming an input size of 
@@ -159,6 +159,20 @@ def Get_State(states_dic,w_list):
     return states_list
 
 
+def Get_TextCoordinator(x0,y0,x1,y1):
+    x_inter = abs(x1- x0)/2
+    y_inter = abs(y1 - y0)/2
+    if x1 > x0:
+        x_inter = x_inter + x0
+    else:
+        x_inter = x_inter + x1
+    if y1>y0:
+        y_inter = y_inter + y0
+    else :
+        y_inter = y_inter + y1
+    return x_inter, y_inter
+
+
 def Markov_Transistion(transitions):
     ### Train the Markov transition matrix, input must be the states. ###
     transitions_list = []
@@ -230,8 +244,34 @@ def Affinity_states(som,states_dic):
         # affinity_states_dic[state_name] = affinity_states_dic[state_name].reshape(1,-1)
         # affinity_states_dic[state_name] = preprocess.normalize(affinity_states_dic[state_name])
     return affinity_states_dic
+
+
+def Prob_Function(value):
+    sigma = 0.5
+    prob = math.exp(-(value)/sigma)
+    return prob
+
                 
-        
+def Define_Prob(affinity_dic):
+#### Normalization affinity distance ####
+    neigbor_unit = {}
+    for key in affinity_dic.keys():
+        normalization_factor = max(affinity_dic[key].values()) - min(affinity_dic[key].values())
+        aux_factor = min(affinity_dic[key].values())
+        neigbor_unit[key] = {}
+        for affinity_index in affinity_dic[key].keys():
+            affinity_dic[key][affinity_index]  = (affinity_dic[key][affinity_index] -aux_factor)/normalization_factor
+            # affinity_dic[key][affinity_index] = math.log10(affinity_dic[key][affinity_index])
+            affinity_dic[key][affinity_index] = Prob_Function(affinity_dic[key][affinity_index])
+            if affinity_dic[key][affinity_index] >= 0.8:
+                neigbor_unit[key][affinity_index] = affinity_dic[key][affinity_index]
+            
+    return neigbor_unit
+
+def get_key (dict, value):
+    return [k for k, v in dict.items() if v[0] == value]    
+
+
 def FP_Rate(input_array, som):
     second_bmu_list = Second_Neighbor(z_e_down, som)
     anaomaly_list ,error_list = Anomaly_Probability(second_bmu_list , z_e_down,som)
@@ -241,9 +281,23 @@ def FP_Rate(input_array, som):
             anomaly = anomaly + 1
     anomaly = anomaly/ len(anaomaly_list)
     print  (anomaly)
+    
+    
+def Map_Input(input_data, winmap_list,som_dim):
+    feature_map = copy.deepcopy(input_data)
+    feature_map = feature_map.sum(axis=1)
+    test_map_array = np.zeros((som_dim[0],som_dim[1]))
+    for i in range (0,len(winmap_list)):
+        x_coordinator = winmap_list[i][0]
+        y_coordinator =  winmap_list[i][1]
+        test_map_array[x_coordinator][y_coordinator] = test_map_array[x_coordinator][y_coordinator] + feature_map[i]
+    sc= MinMaxScaler()
+    test_map_array = sc.fit_transform(test_map_array)
+    return test_map_array
+
 
 if __name__ == '__main__':
-    som_dim = [20,20]
+    som_dim = [16,16]
     # som_dim = [4,4] # A demo size
     batch_size = 64
 
@@ -361,36 +415,71 @@ if __name__ == '__main__':
     states_list = Get_State(states_dic, w_list)
     transition_matrix = Markov_Transistion(states_list)
     
-    
+    test_map_array = Map_Input(dataset,w_list,som_dim)
     # z_e_array = z_e.data.cpu().numpy()
     # z_e_array = z_e_array[:500,:]
-    # ### Downsampling ###
-    z_e_down = z_e_array[0:-1:20]
+    #### Downsampling ###
+    #### Should be tidied up ####
+    
 
-    w_list = []
+    
+    z_e_down = z_e_array[0:-1:200]
+    affinity_states_dic = Affinity_states(som,states_dic)
+    test_dic = affinity_states_dic
+    prob_dic = Define_Prob(test_dic)
+    w_list_sample = []
     for i in range (0,len(z_e_down)):
         w = som.winner(z_e_down[i])
-        w_list.append(w)
+        w_list_sample.append(w)
+    states_list = Get_State(states_dic, w_list_sample)
+    
+    
+    
     fig, ax = plt.subplots()
-    plt.pcolor(som.distance_map().T, cmap='bone_r')
-    plt.colorbar()
-    for i in range (0,len(w_list)):
-        if i <= len(w_list) -2:
-            x_start = w_list[i][0] +0.5
-            x_end = w_list[i+1][0]+0.5
-            y_start = w_list[i][1]+0.5
-            y_end = w_list[i+1][1]+0.5
+    plt.pcolor(test_map_array.T, cmap = 'Greys')
+    cbar = plt.colorbar()
+    cbar.set_label('Velocity ', rotation=270) 
+    for i in range (0,len(w_list_sample)):
+        if i <= len(w_list_sample) -2:
+            # dict_key = states_dic[w_list[i]][0]
+            x_start = w_list_sample[i][0] +0.5
+            x_end = w_list_sample[i+1][0]+0.5
+            y_start = w_list_sample[i][1]+0.5
+            y_end = w_list_sample[i+1][1]+0.5
             xyA = (x_start,y_start)
             xyB = (x_end,y_end)
             coordsA = "data"
             coordsB = "data"
+            # states_dic[w_list[i]]
+            # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
             con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
                           arrowstyle="-|>", shrinkA=5, shrinkB=5,
                           mutation_scale=20, fc="w",color = 'green')
             ax.plot([x_start, x_end], [y_start,y_end], "o")
-            ax.add_artist(con)
-
-            
+            ax.add_artist(con) 
+    for i in range (0,len(w_list_sample)):
+       if i <= len(w_list_sample) -2:
+           dict_key = states_dic[w_list_sample[i]][0]
+           count = 0
+           for keys in prob_dic[dict_key].keys():
+               if count <= 5:
+                   count = count + 1
+                   coordinator = get_key(states_dic,keys)[0]
+                   x_start = w_list_sample[i][0] +0.5
+                   x_end = coordinator[0]+0.5
+                   y_start = w_list_sample[i][1]+0.5
+                   y_end = coordinator[1]+0.5
+                   x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+                   xyA = (x_start,y_start)
+                   xyB = (x_end,y_end)
+                   coordsA = "data"
+                   coordsB = "data"
+                   ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
+                   con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+                              arrowstyle="-|>", shrinkA=5, shrinkB=5,
+                              mutation_scale=20, fc="w",color = 'red', linestyle = '--')
+                   ax.plot([x_start, x_end], [y_start,y_end], "o")
+                   ax.add_artist(con)
  ### Test a new data containing faults ###            
             
 # sampling = 1000
