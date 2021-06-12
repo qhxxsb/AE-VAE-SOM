@@ -41,7 +41,7 @@ ___
         <br/>$\sigma$ refers to $\frac{1}{2} \cdot ||w_{bmu}(v)-w_{bmu}^{'}(v)||$
         <br/>$error_q{v}$ refers to $||v-bmu(u_i)||$
 * <del>$\sigma$ means the divergence of the data. sigma is larger, the results are more dispersed. $\sigma$ should be around $0.5 \rightarrow 1.5$ $Learning\ rate $ should be around $0.5 \rightarrow 2.5$. The map size should not more than $(10,10).$</del>
-*  <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://share.streamlit.io/justglowing/minisom/dashboard/dashboard.py, "demo")
+*  <br/> The detail about hyper parameters can be found here [A simple demo for Hyper parameters](https://share.streamlit.io/justglowing/minisom/dashboard/dashboard.py)
 * An example:
  <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/An_example.png){:height="50%" width="50%"}
 * Loss
@@ -113,4 +113,4 @@ ___
 
 ### Updated June 12h ###
 1. The sampling problem can be checked from the following link (the classical methods):
-    * [Engineering statistics handbook.](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc22.htm, "handbook")
+    * [Engineering statistics handbook.](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc22.htm)
