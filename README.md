@@ -109,3 +109,8 @@ ___
 2. How can we improve/calibrate the method used to map the input data to SOM?
 3. Validate our data.....(This may meet a lot of problems)
 
+
+
+### Updated June 12h ###
+1. The sampling problem can be checked from the following link (the classical methods):
+    * [Engineering statistics handbook.](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc22.htm, "handbook")
