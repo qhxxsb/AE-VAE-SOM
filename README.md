@@ -62,7 +62,7 @@ ___
 ___
 
 ### Updated June 5th
-1. The mapsize should be calibrated with the $\sigma$. In other words, when map size is larger, the sigma should be larger. **Question: How we should interpret these two hyper parameters? ** 
+1. The mapsize should be calibrated with the $\sigma$. In other words, when map size is larger, the sigma should be larger. **Question: How we should interpret these two hyper parameters?** 
 2. The Sin function has been replaced by SocketSense.
 3. Function update:
     * Add a new block to check the FP.
@@ -109,8 +109,13 @@ ___
 2. How can we improve/calibrate the method used to map the input data to SOM?
 3. Validate our data.....(This may meet a lot of problems)
 
-
-
+___
 ### Updated June 12h ###
 1. The sampling problem can be checked from the following link (the classical methods):
     * [Engineering statistics handbook.](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc22.htm)
+
+### Discussion ###
+1. How can we understand **Average Sample Number ** (ASN)?
+<br/> How we understand the $\beta = 0.029$ and which value should be $p_2$ in [Double Sampling Plan](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc24.htm)?
+2. In the  [Double Sampling Plan](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc24.htm), they should define the $P_1$. 
+<br/> For example, As I understand, $P_1 = 1- \alpha + \beta$, although $\alpha$ and $\beta$ belong to different threshold $<n_1,c_1>$ and $<n_2,c_2>$.
