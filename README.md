@@ -113,18 +113,14 @@ ___
 ### Updated June 12h ###
 1. The sampling problem can be checked from the following link (the classical methods):
     * [Engineering statistics handbook.](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc22.htm)
+2. Fix up the datatype of Markov Transition Matrix.
+3. Fix up some bugs.
 
 ### Discussion ###
 1. How can we understand **Average Sample Number ** (ASN)?
 <br/> How we understand the $\beta = 0.029$ and which value should be $p_2$ in [Double Sampling Plan](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc24.htm)?
 2. In the  [Double Sampling Plan](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc24.htm), they should define the $P_1$. 
 <br/> For example, As I understand, $P_1 = 1- \alpha + \beta$, although $\alpha$ and $\beta$ belong to different threshold $<n_1,c_1>$ and $<n_2,c_2>$.
+3. Should Markov Chain have a sample step(frequency) as sampling data? Otherwise, the tranistion probability would equal to 0 if we use the upsampling states, which shows as below:
 
-### Updated June 12h ###
-
-1. Fix up the datatype of Markov Transition Matrix.
-2. Fix up some bugs.
-
-### Discussion ###
-1.Should Markov Chain have a sample step(frequency) as sampling data? Otherwise, the tranistion probability would equal to 0 if we use the upsampling states, which shows as below:
 ![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Markov_Wrong.png){:height="50%" width="50%"}
