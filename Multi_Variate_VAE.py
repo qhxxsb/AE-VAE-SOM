@@ -147,8 +147,8 @@ def Assign_States(win_map):
     i = 0
     for keys in win_map:
         if len(win_map[keys]) != 0:
-            i = i + 1
             states_dic[keys] = ['S' + str(i), i]
+            i = i + 1
     return states_dic
 
 def Get_State(states_dic,w_list):
@@ -172,6 +172,11 @@ def Get_TextCoordinator(x0,y0,x1,y1):
         y_inter = y_inter + y1
     return x_inter, y_inter
 
+def State_Order(states_dic) :
+    state_order = []
+    for values in states_dic.values():
+        state_order.append(values[0])
+    return state_order
 
 def Markov_Transistion(transitions):
     ### Train the Markov transition matrix, input must be the states. ###
@@ -190,6 +195,7 @@ def Markov_Transistion(transitions):
         s = sum(row)
         if s > 0:
             row[:] = [f/s for f in row]
+    transitions_matrix = np.array(transitions_matrix)
     return np.array(transitions_matrix)
 
 # def Temporal_Alignment(win_map, w_list, time_stamp):
@@ -414,7 +420,8 @@ if __name__ == '__main__':
         w_list.append(w)   
     states_list = Get_State(states_dic, w_list)
     transition_matrix = Markov_Transistion(states_list)
-    
+    state_order = State_Order(states_dic)
+    markov_matrix_df = pd.DataFrame(transition_matrix,columns = state_order,index = state_order)
     test_map_array = Map_Input(dataset,w_list,som_dim)
     # z_e_array = z_e.data.cpu().numpy()
     # z_e_array = z_e_array[:500,:]
@@ -441,6 +448,8 @@ if __name__ == '__main__':
     cbar.set_label('Velocity ', rotation=270) 
     for i in range (0,len(w_list_sample)):
         if i <= len(w_list_sample) -2:
+            current_key = states_dic[w_list_sample[i]][0]
+            next_key = states_dic[w_list_sample[i+1]][0]
             # dict_key = states_dic[w_list[i]][0]
             x_start = w_list_sample[i][0] +0.5
             x_end = w_list_sample[i+1][0]+0.5
@@ -452,6 +461,8 @@ if __name__ == '__main__':
             coordsB = "data"
             # states_dic[w_list[i]]
             # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
+            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+            ax.text(x_text, y_text,str(round(markov_matrix_df[current_key][next_key], 2)))
             con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
                           arrowstyle="-|>", shrinkA=5, shrinkB=5,
                           mutation_scale=20, fc="w",color = 'green')
