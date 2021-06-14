@@ -88,8 +88,8 @@ ___
     * Visualization of affinity and path states.
     <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Visualization_Velocity.png){:height="50%" width="50%"}
 ### To do list after June 8th's update
-1. Reschematic Markov Chain.
-    * The Markov Chain should save as a table (dataframe) such as following:
+1. <del> Reschematic Markov Chain.</del> 
+    * <del>The Markov Chain should save as a table (dataframe) such as following:</del>
   
 
         |            |      S1       |  S2     |   S3       | ....... |
@@ -119,3 +119,12 @@ ___
 <br/> How we understand the $\beta = 0.029$ and which value should be $p_2$ in [Double Sampling Plan](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc24.htm)?
 2. In the  [Double Sampling Plan](https://www.itl.nist.gov/div898/handbook/pmc/section2/pmc24.htm), they should define the $P_1$. 
 <br/> For example, As I understand, $P_1 = 1- \alpha + \beta$, although $\alpha$ and $\beta$ belong to different threshold $<n_1,c_1>$ and $<n_2,c_2>$.
+
+### Updated June 12h ###
+
+1. Fix up the datatype of Markov Transition Matrix.
+2. Fix up some bugs.
+
+### Discussion ###
+1.Should Markov Chain have a sample step(frequency) as sampling data? Otherwise, the tranistion probability would equal to 0 if we use the upsampling states, which shows as below:
+![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Markov_Wrong.png){:height="50%" width="50%"}
