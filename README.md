@@ -124,3 +124,11 @@ ___
 3. Should Markov Chain have a sample step(frequency) as sampling data? Otherwise, the tranistion probability would equal to 0 if we use the upsampling states, which shows as below:
 
 ![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Markov_Wrong.png){:height="50%" width="50%"}
+
+___
+### Updated June 15h ###
+1. Add a flowgraph to illustrate the workbench.
+ <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/VAE-SOM%20toolchain.png){:height="50%" width="50%"}
+
+*Note: the sampling problem has not added into the flowgraph. It is a critical problem we should consider now.*
+
