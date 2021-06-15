@@ -131,4 +131,6 @@ ___
  <br/>![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/VAE-SOM%20toolchain.png){:height="50%" width="50%"}
 
 *Note: the sampling problem has not added into the flowgraph. It is a critical problem we should consider now.*
-
+### Discussion ###
+1. How should we sample the data?
+2. How can we merge the slide windows in our code?
