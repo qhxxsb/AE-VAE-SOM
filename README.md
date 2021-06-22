@@ -148,17 +148,17 @@ ___
 
     * 2) Spatial modeling
             
-        $\Bbb{E}_{PD(x)}[\log{p_{\theta}(x)}] \ge {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } $
-        
-        $H_0 \ and \ H_1$
-
-        $g(z_i,z_j) =    exp(-distance(w_{i}, w_{j})/{\delta}$
-
-        $ g(z_i,z_j) \ compare \ to \ H_0  \ and \ H_1 $
-
-        $  \mathcal{L}_{vae}  = {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } $
-
-        $   \mathcal{L}_{vae-som}(\phi, \theta, x_i,x_j)  = \mathcal{L}_{vae}(\phi, \theta, x_i,x_j) +g(z_i,z_j) $
+        $$ ELBO: \Bbb{E}_{PD(x)}[\log{p_{\theta}(x)}] \ge {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } 
+        \\
+        Threshold: H_0 \ and \ H_1
+    \\
+        Similarity: g(z_i,z_j) =    exp(-distance(w_{i}, w_{j})/{\delta}
+    \\
+        Spatial anaomly: g(z_i,z_j) \ compare \ to \ H_0  \ and \ H_1 
+    \\
+        VAE: \mathcal{L}_{vae}  = {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } 
+    \\
+         Loss\ for\ the\ observation\ and\ latent\ space:   \mathcal{L}_{vae-som}(\phi, \theta, x_i,x_j)  = \mathcal{L}_{vae}(\phi, \theta, x_i,x_j) +g(z_i,z_j) $$
 
 
     * 3) Temporal modeling
