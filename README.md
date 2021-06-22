@@ -134,3 +134,33 @@ ___
 ### Discussion ###
 1. How should we sample the data?
 2. How can we merge the slide windows in our code?
+
+___
+
+### Updated June 22rd ###
+1. Fulfill the simlarity and temporal graph to show the dependency.
+ <br/>!![image](https://github.com/qhxxsb/AE-VAE-SOM/blob/Sympathyzzk-patch/Figure/Temporal_Similarity.png){:height="50%" width="50%"}
+
+2. Some summary for the potential publication.
+    * 1) What's the purpose of SOM used in latent space?
+
+        SOM can be understood as the measurement of latent space's Euclidean distance.
+
+    * 2) Spatial modeling
+            
+        $\Bbb{E}_{PD(x)}[\log{p_{\theta}(x)}] \ge {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } $
+        
+        $H_0 \ and \ H_1$
+
+        $g(z_i,z_j) =    exp(-distance(w_{i}, w_{j})/{\delta}$
+
+        $ g(z_i,z_j) \ compare \ to \ H_0  \ and \ H_1 $
+
+        $  \mathcal{L}_{vae}  = {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } $
+
+        $   \mathcal{L}_{vae-som}(\phi, \theta, x_i,x_j)  = \mathcal{L}_{vae}(\phi, \theta, x_i,x_j) +g(z_i,z_j) $
+
+
+    * 3) Temporal modeling
+
+        How we get the threshold of temporal modeling?
