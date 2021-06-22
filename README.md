@@ -132,8 +132,8 @@ ___
 
 *Note: the sampling problem has not added into the flowgraph. It is a critical problem we should consider now.*
 ### Discussion ###
-1. How should we sample the data?
-2. How can we merge the slide windows in our code?
+1. <del>How should we sample the data?</del> 
+2. <del>How can we merge the slide windows in our code </del>?
 
 ___
 
@@ -164,3 +164,5 @@ ___
     * 3) Temporal modeling
 
         How we get the threshold of temporal modeling?
+
+3. Add a function for sliding window.
