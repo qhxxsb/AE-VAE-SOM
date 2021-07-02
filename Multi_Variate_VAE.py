@@ -231,8 +231,9 @@ def Anomaly_Probability(second_bmu_list, z_e_array, som):
         error_coefficent.append((error/sigma)**2)
     return p_anaomaly_list, error_coefficent
 
-def Affinity_states(som,states_dic):
+def Affinity_states(win_map, som,states_dic):
     weights = som.get_weights()
+    
     ### Define SMU  ###
     ### An offline(pre-trained) method to collect the SMU ###
     affinity_states_dic = {}
@@ -260,6 +261,7 @@ def Prob_Function(value):
                 
 def Define_Prob(affinity_dic):
 #### Normalization affinity distance ####
+    affinity_threshold = 0.95
     neigbor_unit = {}
     for key in affinity_dic.keys():
         normalization_factor = max(affinity_dic[key].values()) - min(affinity_dic[key].values())
@@ -269,13 +271,16 @@ def Define_Prob(affinity_dic):
             affinity_dic[key][affinity_index]  = (affinity_dic[key][affinity_index] -aux_factor)/normalization_factor
             # affinity_dic[key][affinity_index] = math.log10(affinity_dic[key][affinity_index])
             affinity_dic[key][affinity_index] = Prob_Function(affinity_dic[key][affinity_index])
-            if affinity_dic[key][affinity_index] >= 0.8:
+            if affinity_dic[key][affinity_index] >= affinity_threshold:
                 neigbor_unit[key][affinity_index] = affinity_dic[key][affinity_index]
             
     return neigbor_unit
 
-def get_key (dict, value):
-    return [k for k, v in dict.items() if v[0] == value]    
+def Get_Key(dict, value):
+    #### the iput dict is (14,14):['S_x', index_nubmer] ####
+    #### Return a key, not a list ####
+
+    return [k for k, v in dict.items() if v[0] == value]
 
 
 def FP_Rate(input_array, som):
@@ -301,58 +306,43 @@ def Map_Input(input_data, winmap_list,som_dim):
     test_map_array = sc.fit_transform(test_map_array)
     return test_map_array
 
+def Rolling_Window(a, window, axis=0):
+####  The inputdata should be numpy     ####
+    if axis == 0:
+        shape = (a.shape[0] - window +1, window, a.shape[-1])
+        strides = (a.strides[0],) + a.strides
+        a_rolling = np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+    elif axis==1:
+        shape = (a.shape[-1] - window +1,) + (a.shape[0], window) 
+        strides = (a.strides[-1],) + a.strides
+        a_rolling = np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+    return a_rolling
 
-if __name__ == '__main__':
-    som_dim = [16,16]
-    # som_dim = [4,4] # A demo size
-    batch_size = 64
+def State_Reduce(states_list,hmm_chain_dic ,state_order):
+    reshape_state_list = []
+    for i in range (0,len(states_list)):
+        input_states = states_list[i][0]
+        iteration_list = []
+        for key in hmm_chain_dic.keys():
+            if input_states != key:
+                iteration_list.append(hmm_chain_dic[key][input_states])
+        repalce_state = state_order[iteration_list.index(max(iteration_list))]
+        reshape_state_list.append([repalce_state,iteration_list.index(max(iteration_list))])
+    return reshape_state_list
 
-    # label_1, train_1 = Create_Input(5, 1000, 0,50)
-    # label_2, train_2 = Create_Input(3, 1000, 0,50)   
-    # label_3, train_3 = Create_Input(1, 1000, 0,50)
+
+
+def Train_VAE(train_dataset,train_label):
     
-    
-    
-    train_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
-    label_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
-    train_post = Read_Csv('MutilVariate.csv', 'Post_dist')
-    label_post = Read_Csv('MutilVariate.csv', 'Post_dist')
-    train_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
-    label_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
-    
-    label_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
-    train_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
-    
-    ### train data means containing the noise
-    # dataset = np.concatenate((train_1,train_2,train_3), axis = 1)
-    # label = np.concatenate((label_1,label_2,label_3), axis = 1)
-    dataset = np.concatenate((train_ant,train_post,train_lat,train_med), axis = 1)
-    label = np.concatenate((label_ant,label_post,label_lat,label_med), axis = 1)
-    # sc = MinMaxScaler()
-    # label_dataset = sc.fit_transform(label)
-    # train_dataset = sc.fit_transform(train)
-    # split_coefficient = 0.6
-    # train_dataset = torch.tensor(dataset[:int(len(dataset)*split_coefficient),:])   
-    # test_dataset =  torch.tensor(dataset[int(len(dataset)*split_coefficient):-1,:])  
-    # train_label = torch.tensor(label[:int(len(dataset)*split_coefficient),:])
-    # test_label =  torch.tensor(label[int(len(train_dataset)*split_coefficient):-1,:]) 
-    train_dataset = torch.tensor(dataset)   
-    train_label = torch.tensor(label)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    train_dataset = torch.tensor(train_dataset)   
+    train_label = torch.tensor(train_label)
     input_dim = train_dataset.shape[1]
     vae = VAE(input_dim).to(device)
     optimizer = optim.Adam(vae.parameters(), lr=0.01)
     loss_func = torch.nn.MSELoss() 
-            
-    
-    # sc = MinMaxScaler()
-    # label_dataset = torch.tensor(sc.fit_transform(label_dataset))
-    # train_dataset = torch.tensor(sc.fit_transform(train_dataset))
     x = train_dataset.float()
     y = train_label.float()
-    # test_x = test_dataset.float()
-    # test_y = test_label.float()
-    
+
     BATCH_SIZE = 100
     EPOCH = 500
     torch_dataset = Data.TensorDataset(x, y)
@@ -362,8 +352,8 @@ if __name__ == '__main__':
         shuffle=True, num_workers=5,)
 
     # torch can only train on Variable, so convert them to Variable
-    x, y = Variable(x), Variable(y)
     loss_list = []
+    
     for epoch in range(EPOCH):
         for step, (batch_x, batch_y) in enumerate(loader): # for each training step
             
@@ -386,17 +376,9 @@ if __name__ == '__main__':
             optimizer.step()        # apply gradients
 
     x = x.to(device)
-    
-    # test_x, test_y = Variable(test_x), Variable(test_y)
-    
-    
-    # prediction, z_e = vae(test_x)
-    # data_som = z_e.detach().cpu().numpy()
-    # som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=1.5, learning_rate=0.5)
-    # som.pca_weights_init(data_som)
-    # som.train(data_som, 1000, random_order=True, verbose=True)  # random training
-    # win_map = som.win_map(data_som)
-    
+    return vae
+
+def Train_SOM(vae,dataset): 
     
     #### Train temporal modeling ###
     dataset_temporal = torch.tensor(dataset)
@@ -405,92 +387,294 @@ if __name__ == '__main__':
      
     prediction, z_e = vae(dataset_temporal)
     z_e_array = z_e.data.cpu().numpy()
-    data_som = z_e.detach().cpu().numpy()
-    som = MiniSom(som_dim[0], som_dim[1], z_e.shape[1], sigma=1.2, learning_rate=1.5)
-    # som.random_weights_init(data_som)
-    som.pca_weights_init(data_som)
-    som.train(data_som, 10000, random_order=True, verbose=True)  # random training
-    win_map = som.win_map(data_som)
+    # data_som =  z_e.data.cpu().numpy()
+    # data_som = z_e.detach().cpu().numpy()
+    som = MiniSom(som_dim[0], som_dim[1], z_e_array.shape[1], sigma=1.2, learning_rate=1.5)
+    som.pca_weights_init(z_e_array)
+    som.train(z_e_array, 10000, random_order=True, verbose=True)  # random training
+
+    
+
+    win_map = som.win_map(z_e_array)
+    
     states_dic = Assign_States(win_map)
+    affinity_states_dic = Affinity_states(win_map, som,states_dic) 
+    prob_dic = Define_Prob(affinity_states_dic)
     
     ### Temporal Modelling ###
     w_list = []
     for i in range (0,len(z_e_array)):
         w = som.winner(z_e_array[i])
         w_list.append(w)   
+        
     states_list = Get_State(states_dic, w_list)
-    transition_matrix = Markov_Transistion(states_list)
-    state_order = State_Order(states_dic)
-    markov_matrix_df = pd.DataFrame(transition_matrix,columns = state_order,index = state_order)
-    test_map_array = Map_Input(dataset,w_list,som_dim)
-    # z_e_array = z_e.data.cpu().numpy()
-    # z_e_array = z_e_array[:500,:]
-    #### Downsampling ###
-    #### Should be tidied up ####
-    
 
+    state_order = State_Order(states_dic)
     
-    z_e_down = z_e_array[0:-1:200]
-    affinity_states_dic = Affinity_states(som,states_dic)
-    test_dic = affinity_states_dic
-    prob_dic = Define_Prob(test_dic)
+    test_map_array = Map_Input(dataset,w_list,som_dim)
+    
+    state_order = State_Order(states_dic)
+    # for key in prob_dic.keys():
+    #     for affinity_key in prob_dic[key].keys():
+    #         if affinity_key in state_order:
+    #             state_order.remove(affinity_key)
+    for key in prob_dic.keys():
+        for affinity_key in prob_dic[key].keys():
+            if affinity_key in state_order:
+                state_order.remove(affinity_key)
+    # state_order
+    
+    hmm_chain_dic ={}
+    for i in range (0,len(state_order)):
+        path_state = state_order[i]
+        hmm_chain_dic[path_state] = {}
+        for key in affinity_states_dic.keys():
+            if key !=path_state:
+                hmm_chain_dic[path_state][key] = affinity_states_dic[key][path_state]
+    
+    reshape_state_list = State_Reduce(states_list, hmm_chain_dic,state_order)
+    transition_matrix = Markov_Transistion(reshape_state_list)
+    markov_matrix_df = pd.DataFrame(transition_matrix,columns = state_order,index = state_order)
+    return  markov_matrix_df,hmm_chain_dic, test_map_array, som, states_dic,win_map,state_order
+    
+    
+    
+    
+def Test_VAE(vae, test_data):
+    test_data = Rolling_Window(test_data, 10)
+    dataset_temporal = torch.tensor(test_data)
+    dataset_temporal = dataset_temporal.float()
+    dataset_temporal =  Variable(dataset_temporal)
+    prediction, z_e = vae(dataset_temporal)
+    z_e_array = z_e.data.cpu().numpy()
+    prediction_array = prediction.data.cpu().numpy()
+    return z_e_array, prediction_array
+
+def Test_SOM(z_e_array, som, states_dic,hmm_chain_dic,state_order,markov_matrix_df,test_map_array):
+    z_e_down = z_e_array
     w_list_sample = []
     for i in range (0,len(z_e_down)):
         w = som.winner(z_e_down[i])
         w_list_sample.append(w)
-    states_list = Get_State(states_dic, w_list_sample)
-    
-    
-    
+    states_list = Get_State(states_dic,w_list_sample)
+    reshape_state_list = State_Reduce(states_list, hmm_chain_dic,state_order)
+    # w_list_sample  = reshape_state_list
     fig, ax = plt.subplots()
     plt.pcolor(test_map_array.T, cmap = 'Greys')
     cbar = plt.colorbar()
-    cbar.set_label('Velocity ', rotation=270) 
-    for i in range (0,len(w_list_sample)):
-        if i <= len(w_list_sample) -2:
-            current_key = states_dic[w_list_sample[i]][0]
-            next_key = states_dic[w_list_sample[i+1]][0]
-            # dict_key = states_dic[w_list[i]][0]
-            x_start = w_list_sample[i][0] +0.5
-            x_end = w_list_sample[i+1][0]+0.5
-            y_start = w_list_sample[i][1]+0.5
-            y_end = w_list_sample[i+1][1]+0.5
+    cbar.set_label('Pressure ', rotation=270) 
+    
+    for i in range (0,len(reshape_state_list)):
+        reshape_state = [i[0] for i in reshape_state_list]
+        if states_list[i][0] not in reshape_state:
+            x_start = Get_Key(states_dic,states_list[i][0])[0][0] + 0.5
+            y_start  = Get_Key(states_dic,states_list[i][0])[0][1] + 0.5
+            x_end = Get_Key(states_dic,reshape_state_list[i][0])[0][0] + 0.5
+            y_end = Get_Key(states_dic,reshape_state_list[i][0])[0][1] + 0.5
+            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
             xyA = (x_start,y_start)
             xyB = (x_end,y_end)
             coordsA = "data"
             coordsB = "data"
-            # states_dic[w_list[i]]
-            # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
-            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
-            ax.text(x_text, y_text,str(round(markov_matrix_df[current_key][next_key], 2)))
+            affinity = round(hmm_chain_dic[reshape_state_list[i][0]][states_list[i][0]], 2)
+            ax.text(x_text, y_text,str(affinity),color = 'red')
             con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-                          arrowstyle="-|>", shrinkA=5, shrinkB=5,
-                          mutation_scale=20, fc="w",color = 'green')
-            ax.plot([x_start, x_end], [y_start,y_end], "o")
-            ax.add_artist(con) 
-    for i in range (0,len(w_list_sample)):
-       if i <= len(w_list_sample) -2:
-           dict_key = states_dic[w_list_sample[i]][0]
-           count = 0
-           for keys in prob_dic[dict_key].keys():
-               if count <= 5:
-                   count = count + 1
-                   coordinator = get_key(states_dic,keys)[0]
-                   x_start = w_list_sample[i][0] +0.5
-                   x_end = coordinator[0]+0.5
-                   y_start = w_list_sample[i][1]+0.5
-                   y_end = coordinator[1]+0.5
-                   x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
-                   xyA = (x_start,y_start)
-                   xyB = (x_end,y_end)
-                   coordsA = "data"
-                   coordsB = "data"
-                   ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
-                   con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
                               arrowstyle="-|>", shrinkA=5, shrinkB=5,
                               mutation_scale=20, fc="w",color = 'red', linestyle = '--')
-                   ax.plot([x_start, x_end], [y_start,y_end], "o")
-                   ax.add_artist(con)
+            ax.plot([x_start, x_end], [y_start,y_end], "o",color = 'red')
+            ax.add_artist(con)
+    for i in range (0,len(reshape_state_list)):
+        if i <= len(states_list) -2 :
+            x_start = Get_Key(states_dic,reshape_state_list[i][0])[0][0] + 0.5
+            y_start = Get_Key(states_dic,reshape_state_list[i][0])[0][1] + 0.5
+            x_end = Get_Key(states_dic,reshape_state_list[i+1][0])[0][0] + 0.5
+            y_end = Get_Key(states_dic,reshape_state_list[i+1][0])[0][1] + 0.5
+            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+            xyA = (x_start,y_start)
+            xyB = (x_end,y_end)
+            coordsA = "data"
+            coordsB = "data"
+            prob = round(markov_matrix_df[reshape_state_list[i][0]][reshape_state_list[i+1][0]], 2)
+            ax.text(x_text, y_text,str(prob),color = 'green')
+            con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+                             arrowstyle="-|>", shrinkA=5, shrinkB=5,
+                             mutation_scale=20, fc="w",color = 'green', linestyle = ':')
+            ax.plot([x_start, x_end], [y_start,y_end], "o")
+            ax.add_artist(con)
+            # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))            
+    # for i in range (0,len(w_list_sample)):
+         # if i <= len(w_list_sample) -2:
+             
+    # for i in range (0,len(w_list_sample)):
+    #     if i <= len(w_list_sample) -2:
+
+            
+    #         current_key = states_dic[w_list_sample[i]][0]
+    #         states_list = Get_State(states_dic,w_list_sample)
+    #         next_key = states_dic[w_list_sample[i+1]][0]
+    #         [current_key,next_key ]= State_Reduce([current_key,next_key])
+    #         # dict_key = states_dic[w_list[i]][0]
+    #         x_start = w_list_sample[i][0] +0.5
+    #         x_end = w_list_sample[i+1][0]+0.5
+    #         y_start = w_list_sample[i][1]+0.5
+    #         y_end = w_list_sample[i+1][1]+0.5
+    #         xyA = (x_start,y_start)
+    #         xyB = (x_end,y_end)
+    #         coordsA = "data"
+    #         coordsB = "data"
+    #         # states_dic[w_list[i]]
+    #         # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
+    #         reshape_state_list = State_Reduce(states_list, hmm_chaim_dic)
+    # #       w_list_sample  = reshape_state_list
+    #         x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+    #         ax.text(x_text, y_text,str(round(markov_matrix_df[next_key][current_key], 2)))
+    #         temporal_probability.append(markov_matrix_df[next_key][current_key])
+    #         con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+    #                       arrowstyle="-|>", shrinkA=5, shrinkB=5,
+    #                       mutation_scale=20, fc="w",color = 'green')
+    #         ax.plot([x_start, x_end], [y_start,y_end], "o")
+    #         ax.add_artist(con) 
+    # return temporal_probability
+    # for i in range (0,len(w_list_sample)):
+    #     if i <= len(w_list_sample) -2:
+    #         dict_key = states_dic[w_list_sample[i]][0]
+    #         # count = 0
+    #         for keys in prob_dic[dict_key].keys():
+    #             # if count <= 5:
+    #             # count = count + 1
+    #             coordinator = get_key(states_dic,keys)[0]
+    #             x_start = w_list_sample[i][0] +0.5
+    #             x_end = coordinator[0]+0.5
+    #             y_start = w_list_sample[i][1]+0.5
+    #             y_end = coordinator[1]+0.5
+    #             x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+    #             xyA = (x_start,y_start)
+    #             xyB = (x_end,y_end)
+    #             coordsA = "data"
+    #             coordsB = "data"
+    #             ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
+    #             con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+    #                         arrowstyle="-|>", shrinkA=5, shrinkB=5,
+    #                         mutation_scale=20, fc="w",color = 'red', linestyle = '--')
+    #             ax.plot([x_start, x_end], [y_start,y_end], "o")
+    #             ax.add_artist(con)
+    
+    
+if __name__ == '__main__':
+    
+    som_dim = [15,15]
+
+    train_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
+    label_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
+    train_post = Read_Csv('MutilVariate.csv', 'Post_dist')
+    label_post = Read_Csv('MutilVariate.csv', 'Post_dist')
+    train_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
+    label_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
+    label_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
+    train_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
+    
+
+    dataset = np.concatenate((train_ant,train_post,train_lat,train_med), axis = 1)
+    label = np.concatenate((label_ant,label_post,label_lat,label_med), axis = 1)
+    
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    vae = Train_VAE(dataset,label)
+    markov_matrix_df,hmm_chain_dic, test_map_array, som, states_dic,win_map,state_order= Train_SOM(vae,dataset)
+    z_e_array,prediction_array = Test_VAE(vae, dataset)
+    Test_SOM(z_e_array[1], som, states_dic,hmm_chain_dic,state_order,markov_matrix_df,test_map_array)
+    # z_e_array, prediction_array = Test_VAE(vae, dataset)
+    # Test_SOM(z_e_array, som, states_dic)
+
+
+
+
+    # state_order = State_Order(states_dic)
+    # for key in prob_dic.keys():
+    #     for affinity_key in prob_dic[key].keys():
+    #         if affinity_key in state_order:
+    #             state_order.remove(affinity_key)
+
+    # hmm_chaim_dic ={}
+    # for i in range (0,len(state_order)):
+    #     path_state = state_order[i]
+    #     hmm_chaim_dic[path_state] = {}
+    #     for key in affinity_states_dic.keys():
+    #         if key !=path_state:
+    #             hmm_chaim_dic[path_state][key] = affinity_states_dic[key][path_state]
+
+
+    # reshape_state_list = []
+    # for i in range (0,len(states_list)):
+    #     input_states = states_list[i][0]
+    #     iteration_list = []
+    #     for key in hmm_chaim_dic.keys():
+    #         if input_states != key:
+    #             iteration_list.append(hmm_chaim_dic[key][input_states])
+    #     repalce_state = state_order[iteration_list.index(max(iteration_list))]
+    #     reshape_state_list.append([repalce_state,iteration_list.index(max(iteration_list))])
+        
+    # z_e_down = z_e_array[0:20]
+    # affinity_states_dic = Affinity_states(som,states_dic)
+    # test_dic = affinity_states_dic
+    # prob_dic = Define_Prob(test_dic)
+    # w_list_sample = []
+    # for i in range (0,len(z_e_down)):
+    #     w = som.winner(z_e_down[i])
+    #     w_list_sample.append(w)
+    # states_list = Get_State(states_dic, w_list_sample)
+    
+    
+    
+    # fig, ax = plt.subplots()
+    # plt.pcolor(test_map_array.T, cmap = 'Greys')
+    # cbar = plt.colorbar()
+    # cbar.set_label('Pressure ', rotation=270) 
+    # for i in range (0,len(w_list_sample)):
+    #     if i <= len(w_list_sample) -2:
+    #         current_key = states_dic[w_list_sample[i]][0]
+    #         next_key = states_dic[w_list_sample[i+1]][0]
+    #         # dict_key = states_dic[w_list[i]][0]
+    #         x_start = w_list_sample[i][0] +0.5
+    #         x_end = w_list_sample[i+1][0]+0.5
+    #         y_start = w_list_sample[i][1]+0.5
+    #         y_end = w_list_sample[i+1][1]+0.5
+    #         xyA = (x_start,y_start)
+    #         xyB = (x_end,y_end)
+    #         coordsA = "data"
+    #         coordsB = "data"
+    #         # states_dic[w_list[i]]
+    #         # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
+    #         x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+    #         ax.text(x_text, y_text,str(round(markov_matrix_df[next_key][current_key], 2)))
+    #         con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+    #                       arrowstyle="-|>", shrinkA=5, shrinkB=5,
+    #                       mutation_scale=20, fc="w",color = 'green')
+    #         ax.plot([x_start, x_end], [y_start,y_end], "o")
+    #         ax.add_artist(con) 
+    # for i in range (0,len(w_list_sample)):
+    #    if i <= len(w_list_sample) -2:
+    #        dict_key = states_dic[w_list_sample[i]][0]
+    #        count = 0
+    #        for keys in prob_dic[dict_key].keys():
+    #            # if count <= 5:
+    #             # count = count + 1
+    #             coordinator = get_key(states_dic,keys)[0]
+    #             x_start = w_list_sample[i][0] +0.5
+    #             x_end = coordinator[0]+0.5
+    #             y_start = w_list_sample[i][1]+0.5
+    #             y_end = coordinator[1]+0.5
+    #             x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+    #             xyA = (x_start,y_start)
+    #             xyB = (x_end,y_end)
+    #             coordsA = "data"
+    #             coordsB = "data"
+    #             ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
+    #             con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
+    #                        arrowstyle="-|>", shrinkA=5, shrinkB=5,
+    #                        mutation_scale=20, fc="w",color = 'red', linestyle = '--')
+    #             ax.plot([x_start, x_end], [y_start,y_end], "o")
+    #             ax.add_artist(con)
  ### Test a new data containing faults ###            
             
 # sampling = 1000
