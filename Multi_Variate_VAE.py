@@ -2,16 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Mar  9 06:37:20 2021
-
 @author: Zikai Zhu and Peng Su
-
-
 Note: 
 variable name should use lowercase eg: test_variable
 Global name should use Uppercase with slash eg: Draw_overview
 function name should use uppercase with slash eg: Draw_Overview
 class name should use Uppercase without slash eg:DrawOverview
-
 Plz note that the rules of visualization is shown below:
     1) The Legend is always in lower right.
     2) The font size should be 15.
@@ -36,7 +32,7 @@ import torch.utils.data as Data
 import math
 import torch.optim as optim
 from torch.autograd import Variable
-from matplotlib.patches import ConnectionPatch
+from matplotlib.patches import ConnectionPatch,Circle
 import pandas as pd
 import matplotlib.pyplot as plt
 from minisom import MiniSom
@@ -71,6 +67,7 @@ class VAE(nn.Module):
 
 
     def encode(self, x):
+        x = x.to(device)
         x = self.relu(self.enc_fc0(x))
         # x = self.dropout(x)
         x = self.relu(self.enc_fc1(x))
@@ -83,6 +80,7 @@ class VAE(nn.Module):
         # print(mu + eps * std)
         return mu + eps * std
     def decode(self,z):
+        z = z.to(device)
         x =  self.relu(self.dec_fc(z))
         # x =  self.relu(self.dec_fc0(x))
         x = self.relu(self.dec_fc1(x))
@@ -99,6 +97,129 @@ class VAE(nn.Module):
         # x = torch.squeeze(x)
         return decoder_out, z_e
     
+class ClusterPoint:
+    def __init__(self, x=0, y=0, index=0, center = 0, group=0):
+    # x,y is location in SOM
+        self.x, self.y, self.index, self.group  = x, y, index, group
+        self.center = center
+
+
+def Hierarchical_Cluster(w_list, second_w_list, win_map, clusters_number):
+    """
+    grouping the neurons in SOM model based on the similarities of prototypes
+    """
+    points_number = som_dim[0]*som_dim[1] # initial number of groups  
+    clusters = [ClusterPoint() for _ in range(points_number)]
+    # Delete neurons with no corresponding input
+    need_del = [] 
+    for index, point in enumerate(clusters):
+        x = index // som_dim[1]
+        y = index % som_dim[1]
+        key = tuple([x,y])
+        if len(win_map[key]) == 0:
+            need_del.append(index)
+        else: 
+            point.x = [x]
+            point.y = [y]
+            point.index = [index]
+            point.center = index
+            point.group = index
+    for i,index in enumerate(need_del):
+        del clusters[need_del[i]-i]
+
+    # similarities of prototypes(normalized)
+    similarity_matrix = [[0]*points_number for _ in range(points_number)]
+    for (best,second) in zip(w_list, second_w_list):
+        best_location = best[0] * som_dim[1] + best[1]
+        second_location = second[0] * som_dim[1] + second[1]
+        similarity_matrix[best_location][second_location] += 1
+    similarity_summed = np.sum(similarity_matrix, axis=-1,keepdims=True)
+    similarity_normalized = similarity_matrix / similarity_summed
+
+    while len(clusters) > clusters_number:
+        # remain last states of clusters
+        clusters_copy = copy.deepcopy(clusters)
+
+        # get pairs of clusters
+        pair_list = []
+        for i in range(len(clusters)):
+            cluster_pair = [i,i]
+            for j in range(i + 1, len(clusters)):
+                i_index = clusters[i].index
+                j_index = clusters[j].index
+                
+                simi_i_sum, closet = 0, 2
+                for i_point in i_index:
+                    simi_j_sum = 0
+                    for j_point in j_index:
+                        simi_j_sum += (similarity_normalized[i_point][j_point] +
+                        similarity_normalized[j_point][i_point])
+                    simi_j_sum = simi_j_sum / len(j_index)
+                    simi_i_sum += simi_j_sum
+                similarity_i_j = simi_i_sum / len(i_index)
+                distance_i_j = 2-similarity_i_j   
+
+                if distance_i_j < closet:
+                    closet = distance_i_j
+                    cluster_pair = [i,j]
+            pair_list.append(cluster_pair)
+
+        # assign groups based on similarity
+        pair_list = np.array(pair_list)
+        for pair in pair_list:
+            same_second = np.where(pair_list[:,1] == pair[1])
+            for i in same_second[0]:
+                if clusters[pair_list[i][0]].group != clusters[pair_list[i][1]].group:
+                    clusters[pair_list[i][0]].group = clusters[pair[0]].group
+            clusters[pair[1]].group = clusters[pair[0]].group
+
+        # Delete neurons in the same group until \
+        # the number of neurons is reduced to clusters_number
+        need_del = []
+        meet_quantity = False
+        for j, cluster in enumerate(clusters):
+            if ~meet_quantity:
+                for i, next in enumerate(clusters):
+                    if i > j:
+                        if next.group == cluster.group:
+                            if (len(clusters) - len(need_del)) <= clusters_number:
+                                meet_quantity = True
+                                break
+                            max_occurrence, center_index = 0, 0
+                            for center in cluster.index:
+                                if similarity_summed[center] > max_occurrence:
+                                    max_occurrence = similarity_summed[center]
+                                    center_index = center
+                            for center in next.index:
+                                if similarity_summed[center] > max_occurrence:
+                                    max_occurrence = similarity_summed[center]
+                                    center_index = center        
+                            cluster.x.extend(next.x)
+                            cluster.y.extend(next.y)
+                            cluster.index.extend(next.index)
+                            cluster.center = center_index
+                            need_del.append(i)
+                            need_del = sorted(need_del)
+                            need_del = list(set(need_del))
+            else: cluster.group = clusters_copy[j].group
+        for i,index in enumerate(need_del):
+            del clusters[index-i]
+
+    return clusters
+
+def Winner_Remap(w_list,centers):
+    """
+    remap winners to the right group
+    """
+    remap_winner = []
+    winner_index = []
+    for local in w_list:
+        index = int(centers[local[0]][local[1]])
+        winner_index.append(index)
+        remap_winner.append((index//som_dim[0],index%som_dim[1]))
+    winner_index = sorted(winner_index)
+    winner_index = list(set(winner_index))
+    return remap_winner, winner_index
 
 def Read_Csv(file_name,column_name):
     """  
@@ -108,17 +229,21 @@ def Read_Csv(file_name,column_name):
         DESCRIPTION.
     column_name : TYPE
         DESCRIPTION.
-
     Returns
     -------
     raw_data : TYPE
         DESCRIPTION.
-
     """
-    file_path = '/home/pengsu-workstation/SocketSense/GenerateData/' + file_name
+    file_path = 'D:/Project/python/_AE-VAE-SOM/' + file_name
     raw_file=pd.read_csv(file_path)
     raw_data = raw_file[column_name].values
     return raw_data.reshape(-1,1) 
+
+def Read_Anomaly(file_name):
+    file_path = 'D:/Project/python/_AE-VAE-SOM/' + file_name
+    raw_file=pd.read_csv(file_path)
+    raw_data = raw_file.values
+    return raw_data
 
 def Create_Input(amplitude, sample_n,noise_amp, time):
     
@@ -140,63 +265,114 @@ def Fault_Inject(raw_data, noise_amp):
 
 
 
-
 def Assign_States(win_map):
-### Initialize the states for Markov Chain  ### 
+    """
+    Get a state dictionary.
+    Initialize the states with SOM position for Markov Chain.
+    win_map[(i,j)] is a list with all the input that have been 
+    mapped to the position.
+    """
     states_dic = {}
     i = 0
     for keys in win_map:
         if len(win_map[keys]) != 0:
-            states_dic[keys] = ['S' + str(i), i]
+            states_dic[keys] = ['S' + str(i), i,keys[0]*som_dim[0]   \
+            +keys[1],win_map[keys]]
             i = i + 1
-    return states_dic
+    return states_dic 
 
 def Get_State(states_dic,w_list):
-### The win map list gotten from SOM trajectory ###
+    """
+    Get the state list with the order of input.
+    The win map list gotten from SOM trajectory.
+    """
     states_list = []
     for i in range (0,len(w_list)):
-        states_list.append(states_dic.get(w_list[i]))
+        states_list.append(states_dic.get(w_list[i])[0:1])
     return states_list
 
 
 def Get_TextCoordinator(x0,y0,x1,y1):
-    x_inter = abs(x1- x0)/2
-    y_inter = abs(y1 - y0)/2
-    if x1 > x0:
-        x_inter = x_inter + x0
-    else:
-        x_inter = x_inter + x1
-    if y1>y0:
-        y_inter = y_inter + y0
-    else :
-        y_inter = y_inter + y1
+    x_inter = (x1 - x0)*0.7
+    y_inter = (y1 - y0)*0.7
+    x_inter = x_inter + x0
+    y_inter = y_inter + y0
+
     return x_inter, y_inter
 
 def State_Order(states_dic) :
+    """
+    Get sequence of state “Si”
+    """
     state_order = []
     for values in states_dic.values():
         state_order.append(values[0])
     return state_order
 
-def Markov_Transistion(transitions):
-    ### Train the Markov transition matrix, input must be the states. ###
-    transitions_list = []
-    for i in range (0,len(transitions)):
-        transitions_list.append(transitions[i][-1])
-    n = 1+ max(transitions_list) #number of states
+# def Markov_Transistion(transitions):
+#     """
+#     Train the Markov transition matrix, input is the redused states.
+#     """
+#     transitions_list = []
+#     for i in range (0,len(transitions)):
+#         transitions_list.append(transitions[i][-1])
+#     n = 1+ max(transitions_list) #number of states
 
-    transitions_matrix = [[0]*n for _ in range(n)]
+#     transitions_matrix = [[0]*n for _ in range(n)]
+
+#     for (i,j) in zip(transitions_list,transitions_list[1:]):
+#         transitions_matrix[i][j] += 1
+
+#     #now convert to probabilities:
+#     for row in transitions_matrix:
+#         s = sum(row)
+#         if s > 0:
+#             row[:] = [f/s for f in row]
+#     transitions_matrix = np.array(transitions_matrix)
+#     return np.array(transitions_matrix)
+
+def Markov_Transistion(states_dic,w_list):
+    """
+    Train the Markov transition matrix with distance, input is all the states.
+    """
+    states_list = []
+    transitions_list = []
+    for i in range (0,len(w_list)):
+        states_list.append(states_dic.get(w_list[i])[0:1])
+        transitions_list.append(w_list[i][0] * som_dim[0] + w_list[i][1])
+
+    size = som_dim[0] * som_dim[1]
+    transitions_matrix = [[0]*size for _ in range(size)]
 
     for (i,j) in zip(transitions_list,transitions_list[1:]):
         transitions_matrix[i][j] += 1
 
     #now convert to probabilities:
-    for row in transitions_matrix:
-        s = sum(row)
-        if s > 0:
-            row[:] = [f/s for f in row]
     transitions_matrix = np.array(transitions_matrix)
-    return np.array(transitions_matrix)
+    # transitions_matrix = np.exp(transitions_matrix)
+    transitions_summed = np.sum(transitions_matrix, axis=-1,keepdims=True)
+    for i in range(len(transitions_summed)):
+        if transitions_summed[i][0] == 0:
+            transitions_summed[i][0] = np.iinfo(np.int32).max
+    transitions_normalized = transitions_matrix / transitions_summed
+    return transitions_normalized,states_list
+    
+def Gaussian_Neigh(c, sigma=0.8):
+    """
+    Returns a Gaussian distance centered in c.[x,y]
+    """
+    g_dis = np.zeros((1,som_dim[0] * som_dim[1]))
+    neigx = np.arange(som_dim[0])
+    neigy = np.arange(som_dim[1])  # used to evaluate the neighborhood function
+    xx = neigx - neigx[c[0]]
+    yy = neigy - neigy[c[1]]
+    d = 2*sigma*sigma
+    ax = np.exp(-np.power(xx, 2)/d)
+    ay = np.exp(-np.power(yy, 2)/d)
+    for x in range(som_dim[0]):
+        for y in range(som_dim[1]):
+            g_dis[0][x * som_dim[0] + y] = ax[x] * ay[y]
+    return g_dis  
 
 # def Temporal_Alignment(win_map, w_list, time_stamp):
 #     states_dic = Assign_States(win_map)
@@ -232,14 +408,17 @@ def Anomaly_Probability(second_bmu_list, z_e_array, som):
     return p_anaomaly_list, error_coefficent
 
 def Affinity_states(win_map, som,states_dic):
+    """
+    Get dic of distance between state_name & affinity_state_name
+    Define SMU  ###
+    An offline(pre-trained) method to collect the SMU
+    affinity_states_dic[state_name][affinity_state_name]     
+    """
     weights = som.get_weights()
-    
-    ### Define SMU  ###
-    ### An offline(pre-trained) method to collect the SMU ###
     affinity_states_dic = {}
     for key in win_map.keys():
         path_state = weights[key[0]][key[1]]
-        state_name = states_dic[key][0]
+        state_name = states_dic[key][0] # Si
         affinity_states_dic[state_name] = {}
         for affinity_key in win_map.keys():
             # iteration_dic = {}
@@ -260,7 +439,10 @@ def Prob_Function(value):
 
                 
 def Define_Prob(affinity_dic):
-#### Normalization affinity distance ####
+    """
+    Normalization affinity distance and remain similar unit
+    neigbor_unit[key][affinity_index]
+    """
     affinity_threshold = 0.95
     neigbor_unit = {}
     for key in affinity_dic.keys():
@@ -295,6 +477,10 @@ def FP_Rate(input_array, som):
     
     
 def Map_Input(input_data, winmap_list,som_dim):
+    """
+    Add the entire rows of input. 
+    Assign values to the corresponding SOM neuron.     
+    """
     feature_map = copy.deepcopy(input_data)
     feature_map = feature_map.sum(axis=1)
     test_map_array = np.zeros((som_dim[0],som_dim[1]))
@@ -307,7 +493,11 @@ def Map_Input(input_data, winmap_list,som_dim):
     return test_map_array
 
 def Rolling_Window(a, window, axis=0):
-####  The inputdata should be numpy     ####
+    """
+    The inputdata should be numpy
+    a: dataset
+    window: a number
+    """
     if axis == 0:
         shape = (a.shape[0] - window +1, window, a.shape[-1])
         strides = (a.strides[0],) + a.strides
@@ -319,6 +509,10 @@ def Rolling_Window(a, window, axis=0):
     return a_rolling
 
 def State_Reduce(states_list,hmm_chain_dic ,state_order):
+    """
+    Get max dis on all states (from hmm) 
+    [S1：...,S2:...,...]
+    """
     reshape_state_list = []
     for i in range (0,len(states_list)):
         input_states = states_list[i][0]
@@ -329,8 +523,6 @@ def State_Reduce(states_list,hmm_chain_dic ,state_order):
         repalce_state = state_order[iteration_list.index(max(iteration_list))]
         reshape_state_list.append([repalce_state,iteration_list.index(max(iteration_list))])
     return reshape_state_list
-
-
 
 def Train_VAE(train_dataset,train_label):
     
@@ -349,7 +541,7 @@ def Train_VAE(train_dataset,train_label):
     loader = Data.DataLoader(
         dataset=torch_dataset, 
         batch_size=BATCH_SIZE, 
-        shuffle=True, num_workers=5,)
+        shuffle=True, num_workers=0,)
 
     # torch can only train on Variable, so convert them to Variable
     loss_list = []
@@ -365,7 +557,8 @@ def Train_VAE(train_dataset,train_label):
             loss_1 = loss_func(prediction[:,0], b_y[:,0])
             loss_2 = loss_func(prediction[:,1], b_y[:,1])
             loss_3 = loss_func(prediction[:,2], b_y[:,2])
-            loss = loss_1 +loss_2+loss_3     # must be (1. nn output, 2. target)
+            loss_4 = loss_func(prediction[:,3], b_y[:,3])
+            loss = loss_1 +loss_2+loss_3+loss_4     # must be (1. nn output, 2. target)
             # loss = loss_func(prediction, b_y)
             if step % 50 == 0:
                 print('%d:loss %f' %(epoch,loss))
@@ -374,195 +567,235 @@ def Train_VAE(train_dataset,train_label):
             optimizer.zero_grad()   # clear gradients for next train
             loss.backward()         # backpropagation, compute gradients
             optimizer.step()        # apply gradients
-
-    x = x.to(device)
     return vae
 
 def Train_SOM(vae,dataset): 
     
-    #### Train temporal modeling ###
+    # Dataset Of Training SOM Modeling 
     dataset_temporal = torch.tensor(dataset)
     dataset_temporal = dataset_temporal.float()
     dataset_temporal =  Variable(dataset_temporal)
-     
     prediction, z_e = vae(dataset_temporal)
+
+    # Get the expectation & variance of input dataset
+    expectation, variance = vae.encode(dataset_temporal)
     z_e_array = z_e.data.cpu().numpy()
-    # data_som =  z_e.data.cpu().numpy()
-    # data_som = z_e.detach().cpu().numpy()
-    som = MiniSom(som_dim[0], som_dim[1], z_e_array.shape[1], sigma=1.2, learning_rate=1.5)
-    som.pca_weights_init(z_e_array)
-    som.train(z_e_array, 10000, random_order=True, verbose=True)  # random training
+    expectation, variance = expectation.data.cpu().numpy(), variance.data.cpu().numpy()
+    som_in = np.concatenate((expectation,variance),axis=-1) # input of som
 
+    # Training SOM
+    som = MiniSom(som_dim[0], som_dim[1], som_in.shape[1], sigma=1.2, learning_rate=1.5)
+    som.pca_weights_init(som_in)
+    som.train(som_in, 5000, random_order=True, verbose=True)  # random training
     
+    #A dictionary,wm[(i,j)]:patterns that have been mapped to the position (i,j)
+    win_map = som.win_map(som_in) 
 
-    win_map = som.win_map(z_e_array)
-    
+    # A dictionary. (x,y):[Si,i,keys[0]*som_dim[0]+keys[1],win_map[keys]]
     states_dic = Assign_States(win_map)
-    affinity_states_dic = Affinity_states(win_map, som,states_dic) 
-    prob_dic = Define_Prob(affinity_states_dic)
     
-    ### Temporal Modelling ###
+    # Get the sequence of winner、second winner & weight
     w_list = []
-    for i in range (0,len(z_e_array)):
-        w = som.winner(z_e_array[i])
-        w_list.append(w)   
-        
-    states_list = Get_State(states_dic, w_list)
+    second_w_list = []
+    weight_seq = []    
+    weight = som.get_weights()
+    for i in range (0,len(som_in)):
+        w,second_w = som.get_winner(som_in[i]) # winner & second winner
+        w_list.append(w)   # (x,y)
+        second_w_list.append(second_w)
+        weight_seq.append(weight[w[0]][w[1]])   
+    weight_seq = np.array(weight_seq)
+    
+    # get clusters_number groups
+    clusters = Hierarchical_Cluster(w_list, second_w_list,win_map,clusters_number)
+    
+    # paint different colors for different groups
+    fig, ax = plt.subplots()
+    ax.set_xlim(0,8)
+    ax.set_ylim(8,0)
+    Z = np.zeros((som_dim[0],som_dim[1]))
+    centers = np.zeros((som_dim[0],som_dim[1]))
+    for color, clus in enumerate(clusters):
+        for i in range(len(clus.x)):
+            centers[clus.x[i]][clus.y[i]] = clus.center
+            Z[clus.x[i]][clus.y[i]] = color        
+        ax.text(clus.center%som_dim[1]+0.5,clus.center//som_dim[1]+0.5,\
+            clus.center,ha="center", va="center",fontsize=12)
+    ax.set_aspect(1)
+    ax.pcolormesh(Z,cmap = 'Blues')
 
-    state_order = State_Order(states_dic)
+    # get the remaped winner list  (x,y),(index)
+    remap_winner,remaped_index_list = Winner_Remap(w_list,centers)
+
+    # get the corresponding weights
+    weight_seq_remap = []    
+    for w in remap_winner:
+        weight_seq_remap.append(weight[w[0]][w[1]])  
+
+    # calculate the Markov transition of all states
+    transition_matrix,states_list = Markov_Transistion(states_dic, w_list)
+    # calculate the Markov transition of remaped groups
+    transition_remaped,states_list_remaped = Markov_Transistion(states_dic, remap_winner)
+
+    for i in remaped_index_list[:-1]:
+        not_zero = []
+        for index, j_column in enumerate(transition_remaped[i]):
+            if j_column > 0.01:
+                not_zero.append(index)
+        for j in not_zero:
+            x_start = i%som_dim[1]+0.5
+            y_start  = i//som_dim[1]+0.5
+            x_end = j%som_dim[1]+0.5
+            y_end = j//som_dim[1]+0.5
+            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
+            xyA = (x_start,y_start)
+            xyB = (x_end,y_end)            
+            float_2 = np.round(transition_remaped[i][j],2)
+            if i == j:
+                ax.text(x_text+0.1, y_text+0.1,str(float_2),color = 'red')    
+                plt.scatter(x_start+0.1,y_start+0.1,c='none',marker='o',edgecolors='k',s=400)
+            else:
+                ax.text(x_text, y_text,str(float_2),color = 'red') 
+                ax.annotate("",xy=xyA,xytext=xyB,size=20,arrowprops= \
+                    dict(arrowstyle="-|>",fc="w"))
+    plt.show()
     
-    test_map_array = Map_Input(dataset,w_list,som_dim)
-    
-    state_order = State_Order(states_dic)
-    # for key in prob_dic.keys():
-    #     for affinity_key in prob_dic[key].keys():
-    #         if affinity_key in state_order:
-    #             state_order.remove(affinity_key)
-    for key in prob_dic.keys():
-        for affinity_key in prob_dic[key].keys():
-            if affinity_key in state_order:
-                state_order.remove(affinity_key)
-    # state_order
-    
-    hmm_chain_dic ={}
-    for i in range (0,len(state_order)):
-        path_state = state_order[i]
-        hmm_chain_dic[path_state] = {}
-        for key in affinity_states_dic.keys():
-            if key !=path_state:
-                hmm_chain_dic[path_state][key] = affinity_states_dic[key][path_state]
-    
-    reshape_state_list = State_Reduce(states_list, hmm_chain_dic,state_order)
-    transition_matrix = Markov_Transistion(reshape_state_list)
-    markov_matrix_df = pd.DataFrame(transition_matrix,columns = state_order,index = state_order)
-    return  markov_matrix_df,hmm_chain_dic, test_map_array, som, states_dic,win_map,state_order
-    
-    
-    
-    
-def Test_VAE(vae, test_data):
+    df = pd.DataFrame(states_list,columns=['winner'])
+    df_temp = pd.DataFrame(states_list_remaped,columns=['winner remapped'])
+    df = pd.concat([df,df_temp],axis = 1)
+    df.to_csv('states_list.csv')
+    return  transition_matrix, states_list, transition_remaped, states_list_remaped, som, \
+        states_dic, win_map, weight_seq, weight_seq_remap, w_list, remap_winner
+
+
+def Plot_Data(dataset,vae,weight_seq,weight_seq_remap):
+    dataset = torch.tensor(dataset)
+    dataset = dataset.float()
+    dataset =  Variable(dataset)
+    prediction, z_e = vae(dataset) 
+    prediction = prediction.data.cpu().numpy()
+
+    weight_seq = torch.tensor(weight_seq)
+    weight_seq = weight_seq.float()
+    weight_seq =  Variable(weight_seq)
+    weight_seq_remap = torch.tensor(weight_seq_remap)
+    weight_seq_remap = weight_seq_remap.float()
+    weight_seq_remap =  Variable(weight_seq_remap)
+    pre_z_e = vae.decode(z_e)
+    pre_som = vae.decode(weight_seq)
+    pre_remap = vae.decode(weight_seq_remap)
+    pre_z_e = pre_z_e.data.cpu().numpy()
+    pre_som = pre_som.data.cpu().numpy()
+    pre_remap = pre_remap.data.cpu().numpy()
+
+    fig, axs = plt.subplots(5, 1)
+    axs[0].plot(dataset)
+    axs[0].set_ylabel('input data')
+    axs[0].grid(True)
+
+    axs[1].plot(prediction)
+    axs[1].set_ylabel('reconstruction data')
+    axs[1].grid(True)
+
+    axs[2].plot(pre_z_e)
+    axs[2].set_ylabel('decode z_e')
+    axs[2].grid(True)
+
+    axs[3].plot(pre_som)
+    axs[3].set_ylabel('decode som')
+    axs[3].grid(True)
+
+    axs[4].plot(pre_remap)
+    axs[4].set_xlabel('time')
+    axs[4].set_ylabel('decode remaped winner')
+    axs[4].grid(True)
+    plt.show()
+
+def Test_VAE(vae, test_data,anomaly_data):
     test_data = Rolling_Window(test_data, 10)
     dataset_temporal = torch.tensor(test_data)
     dataset_temporal = dataset_temporal.float()
     dataset_temporal =  Variable(dataset_temporal)
-    prediction, z_e = vae(dataset_temporal)
+    prediction, z_e = vae(dataset_temporal)   #[1271,10,4]
     z_e_array = z_e.data.cpu().numpy()
     prediction_array = prediction.data.cpu().numpy()
-    return z_e_array, prediction_array
+    expectation, variance = vae.encode(dataset_temporal)
+    expectation, variance = expectation.data.cpu().numpy(), variance.data.cpu().numpy()
+    som_in = np.concatenate((expectation,variance),axis=-1)
 
-def Test_SOM(z_e_array, som, states_dic,hmm_chain_dic,state_order,markov_matrix_df,test_map_array):
-    z_e_down = z_e_array
+    anomaly_data = Rolling_Window(anomaly_data, 10)
+    dataset_temporal = torch.tensor(anomaly_data)
+    dataset_temporal = dataset_temporal.float()
+    dataset_temporal =  Variable(dataset_temporal)
+    prediction, z_e = vae(dataset_temporal)   #[1271,10,4]
+    z_e_array = z_e.data.cpu().numpy()
+    prediction_array = prediction.data.cpu().numpy()
+    expectation, variance = vae.encode(dataset_temporal)
+    expectation, variance = expectation.data.cpu().numpy(), variance.data.cpu().numpy()
+    som_in_noise = np.concatenate((expectation,variance),axis=-1)
+    return z_e_array, prediction_array, som_in, som_in_noise
+
+
+def Test_SOM(som_in, som_in_noise, som, states_dic,transition_matrix):
+    df_tr = pd.DataFrame(transition_matrix)
+    z_e_down = som_in
     w_list_sample = []
-    for i in range (0,len(z_e_down)):
-        w = som.winner(z_e_down[i])
-        w_list_sample.append(w)
-    states_list = Get_State(states_dic,w_list_sample)
-    reshape_state_list = State_Reduce(states_list, hmm_chain_dic,state_order)
-    # w_list_sample  = reshape_state_list
-    fig, ax = plt.subplots()
-    plt.pcolor(test_map_array.T, cmap = 'Greys')
-    cbar = plt.colorbar()
-    cbar.set_label('Pressure ', rotation=270) 
-    
-    for i in range (0,len(reshape_state_list)):
-        reshape_state = [i[0] for i in reshape_state_list]
-        if states_list[i][0] not in reshape_state:
-            x_start = Get_Key(states_dic,states_list[i][0])[0][0] + 0.5
-            y_start  = Get_Key(states_dic,states_list[i][0])[0][1] + 0.5
-            x_end = Get_Key(states_dic,reshape_state_list[i][0])[0][0] + 0.5
-            y_end = Get_Key(states_dic,reshape_state_list[i][0])[0][1] + 0.5
-            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
-            xyA = (x_start,y_start)
-            xyB = (x_end,y_end)
-            coordsA = "data"
-            coordsB = "data"
-            affinity = round(hmm_chain_dic[reshape_state_list[i][0]][states_list[i][0]], 2)
-            ax.text(x_text, y_text,str(affinity),color = 'red')
-            con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-                              arrowstyle="-|>", shrinkA=5, shrinkB=5,
-                              mutation_scale=20, fc="w",color = 'red', linestyle = '--')
-            ax.plot([x_start, x_end], [y_start,y_end], "o",color = 'red')
-            ax.add_artist(con)
-    for i in range (0,len(reshape_state_list)):
-        if i <= len(states_list) -2 :
-            x_start = Get_Key(states_dic,reshape_state_list[i][0])[0][0] + 0.5
-            y_start = Get_Key(states_dic,reshape_state_list[i][0])[0][1] + 0.5
-            x_end = Get_Key(states_dic,reshape_state_list[i+1][0])[0][0] + 0.5
-            y_end = Get_Key(states_dic,reshape_state_list[i+1][0])[0][1] + 0.5
-            x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
-            xyA = (x_start,y_start)
-            xyB = (x_end,y_end)
-            coordsA = "data"
-            coordsB = "data"
-            prob = round(markov_matrix_df[reshape_state_list[i][0]][reshape_state_list[i+1][0]], 2)
-            ax.text(x_text, y_text,str(prob),color = 'green')
-            con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-                             arrowstyle="-|>", shrinkA=5, shrinkB=5,
-                             mutation_scale=20, fc="w",color = 'green', linestyle = ':')
-            ax.plot([x_start, x_end], [y_start,y_end], "o")
-            ax.add_artist(con)
-            # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))            
-    # for i in range (0,len(w_list_sample)):
-         # if i <= len(w_list_sample) -2:
-             
-    # for i in range (0,len(w_list_sample)):
-    #     if i <= len(w_list_sample) -2:
+    w_list = []
+    ano_w_list_sample = []
+    ano_w_list = []
+    size = som_dim[0] * som_dim[1]
 
+    for i in range (0,len(z_e_down)):
+        w_true = som.winner(z_e_down[i])
+        w_anomaly = som.winner(som_in_noise[i])
+        if i>0:
+            g_dis = Gaussian_Neigh(w_true)
+            df_g_mat = pd.DataFrame(g_dis.T)
+            df_tr = pd.concat([df_tr,df_g_mat],axis = 1)
+
+            old_loc = loc
+            num_g = np.argmax(g_dis)
+            num_t = np.argmax(transition_matrix[old_loc])
+            factor = g_dis * transition_matrix[old_loc]
+            df_factor = pd.DataFrame(factor.T)
+            df_tr = pd.concat([df_tr,df_factor],axis = 1)
+            winner = np.argmax(factor)
+            w_list_sample.append(w_true)
+            w_list.append((winner//som_dim[0],winner%som_dim[1])) 
+            print(old_loc,num_g,num_t,winner)
+        
             
-    #         current_key = states_dic[w_list_sample[i]][0]
-    #         states_list = Get_State(states_dic,w_list_sample)
-    #         next_key = states_dic[w_list_sample[i+1]][0]
-    #         [current_key,next_key ]= State_Reduce([current_key,next_key])
-    #         # dict_key = states_dic[w_list[i]][0]
-    #         x_start = w_list_sample[i][0] +0.5
-    #         x_end = w_list_sample[i+1][0]+0.5
-    #         y_start = w_list_sample[i][1]+0.5
-    #         y_end = w_list_sample[i+1][1]+0.5
-    #         xyA = (x_start,y_start)
-    #         xyB = (x_end,y_end)
-    #         coordsA = "data"
-    #         coordsB = "data"
-    #         # states_dic[w_list[i]]
-    #         # ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
-    #         reshape_state_list = State_Reduce(states_list, hmm_chaim_dic)
-    # #       w_list_sample  = reshape_state_list
-    #         x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
-    #         ax.text(x_text, y_text,str(round(markov_matrix_df[next_key][current_key], 2)))
-    #         temporal_probability.append(markov_matrix_df[next_key][current_key])
-    #         con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-    #                       arrowstyle="-|>", shrinkA=5, shrinkB=5,
-    #                       mutation_scale=20, fc="w",color = 'green')
-    #         ax.plot([x_start, x_end], [y_start,y_end], "o")
-    #         ax.add_artist(con) 
-    # return temporal_probability
-    # for i in range (0,len(w_list_sample)):
-    #     if i <= len(w_list_sample) -2:
-    #         dict_key = states_dic[w_list_sample[i]][0]
-    #         # count = 0
-    #         for keys in prob_dic[dict_key].keys():
-    #             # if count <= 5:
-    #             # count = count + 1
-    #             coordinator = get_key(states_dic,keys)[0]
-    #             x_start = w_list_sample[i][0] +0.5
-    #             x_end = coordinator[0]+0.5
-    #             y_start = w_list_sample[i][1]+0.5
-    #             y_end = coordinator[1]+0.5
-    #             x_text, y_text  = Get_TextCoordinator(x_start, y_start, x_end, y_end)
-    #             xyA = (x_start,y_start)
-    #             xyB = (x_end,y_end)
-    #             coordsA = "data"
-    #             coordsB = "data"
-    #             ax.text(x_text, y_text,str(round(prob_dic[dict_key][keys], 2)))
-    #             con = ConnectionPatch(xyA, xyB, coordsA, coordsB,
-    #                         arrowstyle="-|>", shrinkA=5, shrinkB=5,
-    #                         mutation_scale=20, fc="w",color = 'red', linestyle = '--')
-    #             ax.plot([x_start, x_end], [y_start,y_end], "o")
-    #             ax.add_artist(con)
+            g_dis = Gaussian_Neigh(w_anomaly)
+            old_loc = loc_anomaly
+            factor = g_dis * transition_matrix[old_loc]
+            winner = np.argmax(factor)
+            ano_w_list_sample.append(w_anomaly)
+            ano_w_list.append((winner//som_dim[0],winner%som_dim[1])) 
+
+        loc = w_true[0] * som_dim[0] + w_true[1]
+        loc_anomaly = w_anomaly[0] * som_dim[0] + w_anomaly[1]
+
+    df_tr.to_csv('data.csv')
     
-    
+    states_list_sample = Get_State(states_dic,w_list_sample)
+    states_list = Get_State(states_dic,w_list)
+    df = pd.DataFrame(states_list_sample)
+    df_temp = pd.DataFrame(states_list)
+
+    states_list_sample = Get_State(states_dic,ano_w_list_sample)
+    states_list = Get_State(states_dic,ano_w_list)
+    df_ano = pd.DataFrame(states_list_sample)
+    df_temp_ano = pd.DataFrame(states_list)
+
+    df = pd.concat([df,df_temp,df_ano,df_temp_ano],axis = 1)
+    df.to_csv('df.csv')
+
+
 if __name__ == '__main__':
     
-    som_dim = [15,15]
+    som_dim = [8,8]
+    clusters_number = 8
+    # points_number = som_dim[0] * som_dim[1]
 
     train_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
     label_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
@@ -577,12 +810,15 @@ if __name__ == '__main__':
     dataset = np.concatenate((train_ant,train_post,train_lat,train_med), axis = 1)
     label = np.concatenate((label_ant,label_post,label_lat,label_med), axis = 1)
     
-    
+    anomaly_data = Read_Anomaly('Little_Noise.csv')    
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     vae = Train_VAE(dataset,label)
-    markov_matrix_df,hmm_chain_dic, test_map_array, som, states_dic,win_map,state_order= Train_SOM(vae,dataset)
-    z_e_array,prediction_array = Test_VAE(vae, dataset)
-    Test_SOM(z_e_array[1], som, states_dic,hmm_chain_dic,state_order,markov_matrix_df,test_map_array)
+    transition_matrix, states_list, transition_remaped, states_list_remaped, som, \
+    states_dic, win_map, weight_seq, weight_seq_remap, w_list, remap_winner = Train_SOM(vae,dataset)
+    Plot_Data(dataset,vae,weight_seq,weight_seq_remap)
+    z_e_array,prediction_array,som_in,som_in_noise = Test_VAE(vae, dataset,anomaly_data)
+    Test_SOM(som_in[0], som_in_noise[0], som, states_dic,transition_matrix)
     # z_e_array, prediction_array = Test_VAE(vae, dataset)
     # Test_SOM(z_e_array, som, states_dic)
 
@@ -715,5 +951,3 @@ if __name__ == '__main__':
 #                       mutation_scale=20, fc="w",color = 'red',linestyle ='--')
 #         ax.plot([x_start, x_end], [y_start,y_end], "o")
 #         ax.add_artist(con)
-        
-        
