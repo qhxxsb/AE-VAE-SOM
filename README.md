@@ -148,7 +148,7 @@ ___
 
     * 2) Spatial modeling
             
-        $$ ELBO: \Bbb{E}_{PD(x)}[\log{p_{\theta}(x)}] \ge {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } 
+        $$ELBO: \Bbb{E}_{PD(x)}[\log{p_{\theta}(x)}] \ge {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } 
         \\
         Threshold: H_0 \ and \ H_1
     \\
@@ -158,7 +158,7 @@ ___
     \\
         VAE: \mathcal{L}_{vae}  = {\Bbb{E}_{PD(x)}[\Bbb{E}_{q{\phi}(z|x)}[\log{p_{\theta}(x|z)}]-\Bbb{KL}(q_{\phi}(z|x)||p(z))] } 
     \\
-         Loss\ for\ the\ observation\ and\ latent\ space:   \mathcal{L}_{vae-som}(\phi, \theta, x_i,x_j)  = \mathcal{L}_{vae}(\phi, \theta, x_i,x_j) +g(z_i,z_j) $$
+         Loss\ for\ the\ observation\ and\ latent\ space:   \mathcal{L}_{vae-som}(\phi, \theta, x_i,x_j)  = \mathcal{L}_{vae}(\phi, \theta, x_i,x_j) +g(z_i,z_j)$$
 
 
     * 3) Temporal modeling
@@ -166,3 +166,9 @@ ___
         How we get the threshold of temporal modeling?
 
 3. Add a function for sliding window.
+
+### Updated July 19rd ###
+1. Change the code of minisom to enable som.get_winner function to output the best-matching unit and second best-matching unit.
+2. We should compare the correlations between neurons according to this function:
+$$Similarity(i,j) = Number_{ij}+Number_{ji}$$
+where Similarity(i,j) indicates the similarity between neuron i and j(in the begin, one neuron corresponds to one state) and $Number_{ij}$ represents the number of times that neuron j is the second BMU when neuron i is the BMU.
