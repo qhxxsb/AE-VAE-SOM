@@ -25,6 +25,7 @@ Plz note that the rules of visualization is shown below:
 
 
 
+from pandas.core.frame import DataFrame
 import torch
 import torch.nn as nn
 from scipy.spatial import distance
@@ -38,6 +39,7 @@ import matplotlib.pyplot as plt
 from minisom import MiniSom
 import numpy as np
 import copy
+import random
 import sklearn.preprocessing as preprocess 
 from sklearn.preprocessing import MinMaxScaler
 # import Preprocess_Data as predata
@@ -79,6 +81,7 @@ class VAE(nn.Module):
         eps = torch.randn_like(std)
         # print(mu + eps * std)
         return mu + eps * std
+
     def decode(self,z):
         z = z.to(device)
         x =  self.relu(self.dec_fc(z))
@@ -242,8 +245,22 @@ def Read_Csv(file_name,column_name):
 def Read_Anomaly(file_name):
     file_path = 'D:/Project/python/_AE-VAE-SOM/' + file_name
     raw_file=pd.read_csv(file_path)
-    raw_data = raw_file.values
+    raw_data = raw_file.iloc[:,1:].values
     return raw_data
+
+def Windows_Error(file_name = 'Anomaly Inject Location 0.5.csv'):
+    file_path = 'D:/Project/python/_AE-VAE-SOM/' + file_name
+    error_loc=pd.read_csv(file_path)
+    error_loc = error_loc.iloc[:,1:].values
+    error_list = []
+    for i in range(0,len(error_loc)-1):
+        normal_end = error_loc[i][0]+window_size
+        end_point = normal_end if normal_end <= error_loc[i+1][0] else error_loc[i+1][0]
+        error_window = list(range(error_loc[i][0],end_point))
+        error_list = error_list + error_window
+    error_window = list(range(error_loc[-1][0],error_loc[-1][0]+10))
+    error_list = error_list + error_window
+    return error_list
 
 def Create_Input(amplitude, sample_n,noise_amp, time):
     
@@ -257,12 +274,30 @@ def Create_Input(amplitude, sample_n,noise_amp, time):
     y_noise = y_noise.reshape(-1,1)
     return y_true, y_noise
 
-def Fault_Inject(raw_data, noise_amp):
-    noise_data = copy.deepcopy(raw_data) 
-    noise_inject = noise_amp*np.random.normal(0,0.5, size=(raw_data.shape[0], raw_data.shape[1]))
-    noise_data = noise_data + noise_inject
+def Fault_Inject(amp = 0.5):
+    file_path = 'D:/Project/python/_AE-VAE-SOM/' + 'MutilVariate.csv'
+    raw_file=pd.read_csv(file_path)
+    raw_data = raw_file.values
+    # shape = raw_data.shape
+    raw_data = copy.deepcopy(raw_data)
+    max_data = [] 
+    for i in range(0,raw_data.shape[-1]):
+        max_data.append(np.max(raw_data[:,i]))
+    max_data = np.array(max_data)
+    
+    # Spike 
+    noise_loc = random.sample(range(10,1271),k=50)
+    noise_loc = sorted(noise_loc)
+    noise_data = copy.deepcopy(raw_data)
+    for loc in noise_loc:    
+        noise_inject = amp * np.random.choice([-1,1],size=4) * max_data
+        noise_data[loc] = noise_data[loc] + noise_inject
+    df_data = pd.DataFrame(noise_data,columns=['new_Ant','new_Post','new_Lat','new_Med'])
+    loc_data = pd.DataFrame(noise_loc)
+    
+    df_data.to_csv('Anomaly_Inject_' + str(amp) + '.csv')
+    loc_data.to_csv('Anomaly Inject Location '+ str(amp) + '.csv')
     return noise_data
-
 
 
 def Assign_States(win_map):
@@ -585,7 +620,7 @@ def Train_SOM(vae,dataset):
 
     # Training SOM
     som = MiniSom(som_dim[0], som_dim[1], som_in.shape[1], sigma=1.2, learning_rate=1.5)
-    som.pca_weights_init(som_in)
+    # som.pca_weights_init(som_in)
     som.train(som_in, 5000, random_order=True, verbose=True)  # random training
     
     #A dictionary,wm[(i,j)]:patterns that have been mapped to the position (i,j)
@@ -658,17 +693,20 @@ def Train_SOM(vae,dataset):
                 ax.text(x_text, y_text,str(float_2),color = 'red') 
                 ax.annotate("",xy=xyA,xytext=xyB,size=20,arrowprops= \
                     dict(arrowstyle="-|>",fc="w"))
-    plt.show()
+    # plt.tight_layout()
+    # plt.colorbar()
+    plt.savefig('image.png',bbox_inches = 'tight',pad_inches = 0.05)
+    # plt.show()
     
     df = pd.DataFrame(states_list,columns=['winner'])
     df_temp = pd.DataFrame(states_list_remaped,columns=['winner remapped'])
     df = pd.concat([df,df_temp],axis = 1)
     df.to_csv('states_list.csv')
     return  transition_matrix, states_list, transition_remaped, states_list_remaped, som, \
-        states_dic, win_map, weight_seq, weight_seq_remap, w_list, remap_winner
+        states_dic, win_map, weight_seq, weight_seq_remap, w_list, remap_winner,centers
 
 
-def Plot_Data(dataset,vae,weight_seq,weight_seq_remap):
+def Plot_Data(dataset,vae,weight_seq,weight_seq_remap,anomaly_data):
     dataset = torch.tensor(dataset)
     dataset = dataset.float()
     dataset =  Variable(dataset)
@@ -693,26 +731,39 @@ def Plot_Data(dataset,vae,weight_seq,weight_seq_remap):
     axs[0].set_ylabel('input data')
     axs[0].grid(True)
 
-    axs[1].plot(prediction)
+    axs[1].plot(pre_z_e)
     axs[1].set_ylabel('reconstruction data')
     axs[1].grid(True)
 
     axs[2].plot(pre_z_e)
-    axs[2].set_ylabel('decode z_e')
+    axs[2].set_ylabel('decoding of z_e')
     axs[2].grid(True)
 
     axs[3].plot(pre_som)
-    axs[3].set_ylabel('decode som')
+    axs[3].set_ylabel('decoding of som')
     axs[3].grid(True)
 
     axs[4].plot(pre_remap)
     axs[4].set_xlabel('time')
-    axs[4].set_ylabel('decode remaped winner')
+    axs[4].set_ylabel('decoding remaped winner')
     axs[4].grid(True)
+    plt.savefig('result.png',bbox_inches = 'tight',pad_inches = 0.05)
+    # plt.show()
+
+def Plot_Noise(dataset,anomaly_data):
+    fig, axs = plt.subplots(2, 1)
+    axs[0].plot(dataset)
+    axs[0].set_ylabel('input data')
+    axs[0].grid(True)
+
+    axs[1].plot(anomaly_data)
+    axs[1].set_ylabel('anomaly data')
+    axs[1].grid(True)
+    plt.tight_layout()
     plt.show()
 
 def Test_VAE(vae, test_data,anomaly_data):
-    test_data = Rolling_Window(test_data, 10)
+    test_data = Rolling_Window(test_data, window_size)
     dataset_temporal = torch.tensor(test_data)
     dataset_temporal = dataset_temporal.float()
     dataset_temporal =  Variable(dataset_temporal)
@@ -723,7 +774,7 @@ def Test_VAE(vae, test_data,anomaly_data):
     expectation, variance = expectation.data.cpu().numpy(), variance.data.cpu().numpy()
     som_in = np.concatenate((expectation,variance),axis=-1)
 
-    anomaly_data = Rolling_Window(anomaly_data, 10)
+    anomaly_data = Rolling_Window(anomaly_data, window_size)
     dataset_temporal = torch.tensor(anomaly_data)
     dataset_temporal = dataset_temporal.float()
     dataset_temporal =  Variable(dataset_temporal)
@@ -733,68 +784,119 @@ def Test_VAE(vae, test_data,anomaly_data):
     expectation, variance = vae.encode(dataset_temporal)
     expectation, variance = expectation.data.cpu().numpy(), variance.data.cpu().numpy()
     som_in_noise = np.concatenate((expectation,variance),axis=-1)
+
+    # fig, axs = plt.subplots(2, 1)
+    # axs[0].plot(som_in)
+    # axs[0].set_ylabel('exp & var data')
+    # axs[0].grid(True)
+    # axs[1].plot(som_in_noise)
+    # axs[1].set_ylabel('exp & var data with noise')
+    # axs[1].grid(True)    
+    # plt.show()
+
     return z_e_array, prediction_array, som_in, som_in_noise
 
-
-def Test_SOM(som_in, som_in_noise, som, states_dic,transition_matrix):
-    df_tr = pd.DataFrame(transition_matrix)
-    z_e_down = som_in
-    w_list_sample = []
-    w_list = []
-    ano_w_list_sample = []
-    ano_w_list = []
-    size = som_dim[0] * som_dim[1]
-
-    for i in range (0,len(z_e_down)):
-        w_true = som.winner(z_e_down[i])
-        w_anomaly = som.winner(som_in_noise[i])
-        if i>0:
-            g_dis = Gaussian_Neigh(w_true)
-            df_g_mat = pd.DataFrame(g_dis.T)
-            df_tr = pd.concat([df_tr,df_g_mat],axis = 1)
-
-            old_loc = loc
-            num_g = np.argmax(g_dis)
-            num_t = np.argmax(transition_matrix[old_loc])
-            factor = g_dis * transition_matrix[old_loc]
-            df_factor = pd.DataFrame(factor.T)
-            df_tr = pd.concat([df_tr,df_factor],axis = 1)
-            winner = np.argmax(factor)
+def Test_SOM(som_in, som_in_noise, som, states_dic,transition_matrix,centers,window_error):
+    # window_error = Windows_Error()
+    shape = som_in_noise.shape  #[1271,10,4]
+    normal_shape = som_in.shape[0] + window_size - 1  #[1280,10,4]
+    # data = np.arange(0,shape[1])
+    # df = pd.DataFrame(data)
+    p_list = []
+    p_local = []
+    true_positive = 0
+    false_positive = 0
+    true_negative = 0
+    for lin in range(0,shape[0]):
+        w_list_sample = []
+        ano_w_list_sample = []
+        p = 1
+        if lin%normal_shape > (normal_shape - window_size):
+            continue
+        for i in range (0,shape[1]):
+            w_true = som.winner(som_in[lin%normal_shape][i])
+            w_anomaly = som.winner(som_in_noise[lin][i])
             w_list_sample.append(w_true)
-            w_list.append((winner//som_dim[0],winner%som_dim[1])) 
-            print(old_loc,num_g,num_t,winner)
-        
-            
-            g_dis = Gaussian_Neigh(w_anomaly)
-            old_loc = loc_anomaly
-            factor = g_dis * transition_matrix[old_loc]
-            winner = np.argmax(factor)
             ano_w_list_sample.append(w_anomaly)
-            ano_w_list.append((winner//som_dim[0],winner%som_dim[1])) 
+            remap_winner_true, _ = Winner_Remap(w_list_sample,centers)
+            remap_winner_anomaly, _ = Winner_Remap(ano_w_list_sample,centers)
+            if i > 0:
+                x = remap_winner_anomaly[-2][0] * som_dim[1] + remap_winner_anomaly[-2][1]
+                y = remap_winner_anomaly[-1][0] * som_dim[1] + remap_winner_anomaly[-1][1]
+                p = p * transition_matrix[x][y]
+        p = -np.log(p)
+        p_list.append(p)
+        p_local.append(lin+(window_size - 1))
+        states_list_normal = Get_State(states_dic,remap_winner_true)
+        states_list_anomaly = Get_State(states_dic,remap_winner_anomaly)
+        column = str(lin+(window_size - 1))
+        # if states_list_normal[-1] != states_list_anomaly[-1]:
+        #     df_true = pd.DataFrame(states_list_normal,columns=[column])
+        #     df_ano = pd.DataFrame(states_list_anomaly,columns=[column])
+        #     df = pd.concat([df,df_true,df_ano],axis = 1)
+    p_list = np.array(p_list)
+    detect_error = np.where(p_list>threshold)
+    detect_normal = np.where(p_list<=threshold)
+    for loc in detect_error[0]:
+        if (loc+(window_size-1)) in window_error:
+            true_negative += 1
+    for loc in detect_normal[0]:
+        if (loc+(window_size-1)) in window_error:
+            false_positive += 1
+    true_positive = len(detect_normal[0]) - false_positive
+    accuracy = (true_positive + true_negative) / shape[0]
+    true_negative_rate = true_negative / len(window_error)
+    print(f'Error windows is {len(window_error)},Accuracy is {accuracy},True positive is {true_positive},Ture negative is {true_negative} & {true_negative_rate}')
+    df_p = pd.DataFrame(p_list)
+    df_p_loc = pd.DataFrame(p_local)
+    df_p = pd.concat([df_p,df_p_loc],axis = 1)
+    return df_p,accuracy,true_negative_rate
+    # for lin in range(0,shape[0]):
+    #     w_true = som.winner(som_in[lin])
+    #     w_anomaly = som.winner(som_in_noise[lin])
+    #     if w_true != w_anomaly:
+    #         print(lin)
+    #     w_list_sample.append(w_true)
+    #     ano_w_list_sample.append(w_anomaly)
+  
+    #     remap_winner_true, _ = Winner_Remap(w_list_sample,centers)
+    #     remap_winner_anomaly, _ = Winner_Remap(ano_w_list_sample,centers)
 
-        loc = w_true[0] * som_dim[0] + w_true[1]
-        loc_anomaly = w_anomaly[0] * som_dim[0] + w_anomaly[1]
+    # states_list_sample = Get_State(states_dic,remap_winner_true)
+    # df_true = pd.DataFrame(states_list_sample)
+    # states_list_sample = Get_State(states_dic,remap_winner_anomaly)
+    # df_ano = pd.DataFrame(states_list_sample)
+    # df = pd.concat([df,df_true,df_ano],axis = 1)
 
-    df_tr.to_csv('data.csv')
+    # for lin in range(0,shape[0]):
+    #     w_list_sample = []
+    #     ano_w_list_sample = []
+    #     column = str(lin)
+    #     for i in range (0,shape[1]):
+    #         w_true = som.winner(som_in[lin][i])
+    #         w_anomaly = som.winner(som_in_noise[lin][i])
+    #         w_list_sample.append(w_true)
+    #         ano_w_list_sample.append(w_anomaly)
+  
+    #     remap_winner_true, _ = Winner_Remap(w_list_sample,centers)
+    #     remap_winner_anomaly, _ = Winner_Remap(ano_w_list_sample,centers)
+    #     if remap_winner_true != remap_winner_anomaly:
+    #         print(lin)
+    #     states_list_sample = Get_State(states_dic,remap_winner_true)
+    #     df_true = pd.DataFrame(states_list_sample,columns=[column])
+    #     states_list_sample = Get_State(states_dic,remap_winner_anomaly)
+    #     df_ano = pd.DataFrame(states_list_sample,columns=[column])
+    #     df = pd.concat([df,df_true,df_ano],axis = 1)
     
-    states_list_sample = Get_State(states_dic,w_list_sample)
-    states_list = Get_State(states_dic,w_list)
-    df = pd.DataFrame(states_list_sample)
-    df_temp = pd.DataFrame(states_list)
-
-    states_list_sample = Get_State(states_dic,ano_w_list_sample)
-    states_list = Get_State(states_dic,ano_w_list)
-    df_ano = pd.DataFrame(states_list_sample)
-    df_temp_ano = pd.DataFrame(states_list)
-
-    df = pd.concat([df,df_temp,df_ano,df_temp_ano],axis = 1)
-    df.to_csv('df.csv')
-
 
 if __name__ == '__main__':
     
     som_dim = [8,8]
-    clusters_number = 8
+    clusters_number = 9
+    window_size = 10
+    threshold = 22
+    spike_amp = 0.4
+
     # points_number = som_dim[0] * som_dim[1]
 
     train_ant = Read_Csv('MutilVariate.csv', 'Ant_dist')
@@ -805,20 +907,48 @@ if __name__ == '__main__':
     label_lat = Read_Csv('MutilVariate.csv', 'Lat_dist')
     label_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
     train_med = Read_Csv('MutilVariate.csv', 'Med_dist') 
-    
 
     dataset = np.concatenate((train_ant,train_post,train_lat,train_med), axis = 1)
     label = np.concatenate((label_ant,label_post,label_lat,label_med), axis = 1)
-    
-    anomaly_data = Read_Anomaly('Little_Noise.csv')    
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    vae = Train_VAE(dataset,label)
-    transition_matrix, states_list, transition_remaped, states_list_remaped, som, \
-    states_dic, win_map, weight_seq, weight_seq_remap, w_list, remap_winner = Train_SOM(vae,dataset)
-    Plot_Data(dataset,vae,weight_seq,weight_seq_remap)
-    z_e_array,prediction_array,som_in,som_in_noise = Test_VAE(vae, dataset,anomaly_data)
-    Test_SOM(som_in[0], som_in_noise[0], som, states_dic,transition_matrix)
+
+    for _ in range(0,5):
+        vae = Train_VAE(dataset,label)
+        transition_matrix, states_list, transition_remaped, states_list_remaped, som, \
+        states_dic, win_map, weight_seq, weight_seq_remap, w_list, remap_winner,centers = Train_SOM(vae,dataset)
+        # Plot_Data(dataset,vae,weight_seq,weight_seq_remap,anomaly_data)
+        # Plot_Noise(dataset[160:290],anomaly_data)  
+
+        for thre in range(1,30):
+            threshold = thre
+            accuracy_aver, true_negative_rate_aver = 0, 0
+
+            data = np.arange(0,1281-window_size)
+            df_p = pd.DataFrame(data)
+            window_error_list = []
+            for i in range(0,20):
+                Fault_Inject(amp = spike_amp)
+                anomaly_data = Read_Anomaly('Anomaly_Inject_' + str(spike_amp) + '.csv')   
+                window_error = Windows_Error('Anomaly Inject Location ' + str(spike_amp) + '.csv')    
+                z_e_array,prediction_array,som_in,som_in_noise = Test_VAE(vae, dataset,anomaly_data)
+                df_temp,accuracy,true_negative_rate = Test_SOM(som_in, som_in_noise, som, states_dic,transition_remaped,centers,window_error)
+                df_p = pd.concat([df_p,df_temp],axis = 1)
+                window_error_list = window_error_list + window_error
+                accuracy_aver += accuracy
+                true_negative_rate_aver += true_negative_rate
+            accuracy_aver = accuracy_aver /20
+            true_negative_rate_aver = true_negative_rate_aver /20
+            df_p.to_csv('p list.csv')
+            error = pd.DataFrame(window_error_list)
+            error.to_csv('error.csv')
+            print('%.2f %d %d %.2f Average TN rate is %.4f,Average accuracy is %.4f' % (spike_amp, window_size,clusters_number,threshold,true_negative_rate_aver,accuracy))
+            
+            with open('result.txt', 'a') as f:
+                reslult_str = f'Amp:{spike_amp} Window:{window_size} Som Num:{clusters_number} Yvzhi:{threshold} TN:{true_negative_rate_aver} Acc:{accuracy}\n'
+                f.write(reslult_str)
+                f.close
+
+
     # z_e_array, prediction_array = Test_VAE(vae, dataset)
     # Test_SOM(z_e_array, som, states_dic)
 
